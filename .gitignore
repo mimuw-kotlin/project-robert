@@ -1,0 +1,67 @@
+# IntelliJ IDEA specific files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.bak
+*.orig
+
+# Build output directories
+/out/
+build/
+
+# Gradle files (if using Gradle)
+.gradle/
+/build/
+
+# Maven files (if using Maven)
+target/
+
+# Node.js dependencies (if using Node.js)
+node_modules/
+
+# Kotlin/Java specific files
+*.class
+*.jar
+*.war
+*.ear
+
+# Compiled bytecode for Kotlin Multiplatform
+*.js
+*.kexe
+*.klib
+*.kotlin_metadata
+
+# Generated files by Bazel
+bazel-bin/
+bazel-out/
+bazel-testlogs/
+.bazelrc.user
+bazel-*
+
+# Ignore specific IDE caches and settings
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/libraries/
+.idea/modules.xml
+.idea/vcs.xml
+.idea/maven.xml
+.idea/sonarlint/
+.idea/httpRequests/
+.idea/assetWizard.xml
+
+# Plugin settings
+.idea/runConfigurations/
+
+# Other files
+*.env

@@ -1,25 +1,24 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/M0kyOMLZ)
-# Frobnicator (this is a template)
+# Katrix
 
 ## Authors
-- Andrzej Głuszak (@agluszak on GitHub)
-- Linus Torvalds (@torvalds on GitHub)
+- Robert Grigoryan (@goborori on GitHub)
 
 ## Description
-Frobnicator is going to be a platformer game similar to Super Mario Bros made using Korge game engine.
+A Matrix client written using Compose Multiplatform and Trixnity Messenger.
 
 ## Features
-- map generator
-- shooting
-- enemy AI
-- game state saving and loading
-- scores
+- user authentication
+- message sync
+- message sending
+- room management
+- user status
 
 ## Plan
-In the first part we're going to implement the basics: movement, physics and shooting. The enemies will simply bounce from one edge of the platform to the other. There will be only a single map.
+In the first part we're going to implement the basics: user authentication, message sync and room management.
 
-In the second part we're going to add random map generator, saving/loading, scores and a more sophisticated AI.
+In the second part we're going to add message sending, user status and improve the UI.
 
 ## Libraries
-- Korge (https://korge.org/)
-- kotlinx-serialization (https://github.com/Kotlin/kotlinx.serialization)
+- Compose Multiplatform (https://github.com/JetBrains/compose-multiplatform)
+- Trixnity Messenger (https://gitlab.com/connect2x/trixnity-messenger/trixnity-messenger)

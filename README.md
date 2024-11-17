@@ -5,7 +5,7 @@
 - Robert Grigoryan (@goborori on GitHub)
 
 ## Description
-A Matrix client written using Compose Multiplatform and Trixnity Messenger.
+A [Matrix](https://matrix.org/) client written using Compose Multiplatform and Trixnity Messenger.
 
 ## Features
 - user authentication

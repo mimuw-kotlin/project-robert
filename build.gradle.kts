@@ -21,6 +21,14 @@ dependencies {
     // (in a separate module for demo project and in testMain).
     // With compose.desktop.common you will also lose @Preview functionality
     implementation(compose.desktop.currentOs)
+    implementation("net.folivo:trixnity-client:4.11.0")
+    implementation("net.folivo:trixnity-client-repository-realm:4.11.0")
+    implementation("net.folivo:trixnity-client-media-okio:4.11.0")
+    implementation("org.slf4j:slf4j-api:2.0.9") // Core SLF4J API
+    implementation("org.slf4j:slf4j-simple:2.0.9") // Simple implementation
+    implementation("androidx.compose.runtime:runtime-desktop:1.7.0")
+    implementation("io.ktor:ktor-client-core:3.0.2")
+    implementation("io.ktor:ktor-client-okhttp:3.0.2")
 }
 
 compose.desktop {

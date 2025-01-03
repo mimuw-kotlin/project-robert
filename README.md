@@ -14,6 +14,10 @@ A [Matrix](https://matrix.org/) client written using Compose Multiplatform and T
 - room management
 - user status
 
+## TODO
+
+- switch between "Log in" and "Log out" menu options
+
 ## Plan
 In the first part we're going to implement the basics: user authentication, message sync and room management.
 

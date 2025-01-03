@@ -1,8 +1,6 @@
 import io.ktor.client.engine.*
 import io.ktor.http.*
-import net.folivo.trixnity.client.MatrixClient
-import net.folivo.trixnity.client.login
-import net.folivo.trixnity.client.room
+import net.folivo.trixnity.client.*
 import net.folivo.trixnity.client.room.message.text
 import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 
@@ -12,6 +10,7 @@ import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 class Client(
     private val matrixClient: MatrixClient,
 ) : AutoCloseable {
+
     companion object {
         suspend fun login(loginData: LoginData, httpClientEngine: HttpClientEngine): Result<Client> {
             val cache = Cache.create()
@@ -36,12 +35,12 @@ class Client(
         }
     }
 
-    suspend fun logout() = matrixClient.logout()
+    fun getStatus() = matrixClient.loginState
 
     fun getRooms() = matrixClient.room.getAll()
 
-    suspend fun send(message: Message) = matrixClient.room.sendMessage(message.roomId) {
-        text(message.text)
+    suspend fun send(message: RoomMessage) = matrixClient.room.sendMessage(message.getRoomId()) {
+        text(message.getText())
     }
 
     override fun close() {

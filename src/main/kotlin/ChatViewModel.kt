@@ -1,6 +1,8 @@
 import io.ktor.client.engine.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import net.folivo.trixnity.core.model.RoomId
+import java.time.Instant
 
 class ChatViewModel : CoroutineScope {
     private val job = Job()
@@ -8,34 +10,39 @@ class ChatViewModel : CoroutineScope {
     private var loginJob: Job? = null
 
     private val _state = MutableStateFlow(ChatState())
-    val chatState: StateFlow<ChatState> = _state
+    val state: StateFlow<ChatState> = _state
 
     fun login(loginData: Client.LoginData, httpClientEngine: HttpClientEngine) {
-        pushMessage(InfoMessage("Logging in..."))
+        pushMessage(InfoMessage("Logging in...", Instant.now()))
         loginJob?.cancel()
         loginJob = launch {
             try {
                 Client.login(loginData, httpClientEngine).fold(
                     onSuccess = { client ->
-                        pushMessage(InfoMessage("Logged in"))
+                        pushMessage(InfoMessage("Logged in", Instant.now()))
                         _state.update { currentState ->
                             currentState.client?.close()
                             currentState.copy(client = client)
                         }
                     },
                     onFailure = {
-                        pushMessage(ErrorMessage(it.message ?: "Unknown error"))
+                        pushMessage(ErrorMessage(it.message ?: "Unknown error", Instant.now()))
                     }
                 )
             } catch (e: CancellationException) {
-                pushMessage(InfoMessage("Logged out"))
+                pushMessage(InfoMessage("Logged out", Instant.now()))
             }
         }
+    }
 
+    fun setActiveRoom(roomId: RoomId?) {
+        _state.update { currentState ->
+            currentState.copy(activeRoomId = roomId)
+        }
     }
 
     fun logout() {
-        pushMessage(InfoMessage("Logging out..."))
+        pushMessage(InfoMessage("Logging out...", Instant.now()))
         loginJob?.cancel()
         _state.update { currentState ->
             currentState.client?.close()
@@ -45,7 +52,7 @@ class ChatViewModel : CoroutineScope {
 
     private fun pushMessage(message: Message) {
         _state.update { currentState ->
-            currentState.copy(messages = currentState.messages + message)
+            currentState.copy(mainMessages = currentState.mainMessages + message)
         }
     }
 }

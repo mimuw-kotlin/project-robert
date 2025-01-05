@@ -1,9 +1,11 @@
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -14,9 +16,13 @@ import androidx.compose.ui.window.application
 import io.ktor.client.engine.okhttp.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import net.folivo.trixnity.client.flattenValues
+import net.folivo.trixnity.client.store.Room
+import net.folivo.trixnity.client.store.RoomUser
 import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 import net.folivo.trixnity.core.model.RoomId
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun <T> TitleList(
@@ -27,9 +33,7 @@ fun <T> TitleList(
 ) {
     Column(modifier = modifier) {
         Text(header, style = MaterialTheme.typography.h6)
-        LazyColumn(
-            contentPadding = PaddingValues(8.dp)
-        ) {
+        LazyColumn {
             items(items) { item ->
                 composable(item)
             }
@@ -45,6 +49,7 @@ fun MessageInput() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         TextField(
             modifier = Modifier.weight(1f),
@@ -61,17 +66,46 @@ fun MessageInput() {
 }
 
 @Composable
-fun RoomList(rooms: Flow<List<RoomId>>?) {
-    val _rooms by rooms?.collectAsState(initial = emptyList()) ?: remember { mutableStateOf(emptyList()) }
+fun RoomList(
+    rooms: Flow<Set<Room>>?,
+    chosenRoom: RoomId?,
+    onRoomClick: (RoomId) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val rooms_ by rooms?.collectAsState(initial = emptySet()) ?: mutableStateOf(emptySet())
 
-    TitleList("Rooms", _rooms) {
-        Text(it.localpart)
+    TitleList("Rooms", rooms_.toList(), modifier = modifier) {
+        Text(
+            it.name?.explicitName ?: it.roomId.toString(),
+            modifier = Modifier
+                .clickable(onClick = { onRoomClick(it.roomId) })
+                .fillMaxWidth(),
+            fontWeight = if (it.roomId == chosenRoom) FontWeight.Bold else  FontWeight.Normal)
     }
 }
 
 @Composable
+fun MessageView(message: Message) {
+    val timestamp = message.time.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+
+    Text(
+        text = "[$timestamp] ${message.text}",
+        color = message.getColor(),
+    )
+}
+
+@Composable
 fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
-    val state = viewModel.chatState.collectAsState()
+    val state = viewModel.state.collectAsState()
+    val activeRoomId = state.value.activeRoomId
+    var roomUsersFlow by remember { mutableStateOf<Flow<List<RoomUser>>?>(null) }
+    val roomUsers by roomUsersFlow?.collectAsState(emptyList()) ?: mutableStateOf(emptyList())
+
+    LaunchedEffect(activeRoomId) {
+        roomUsersFlow = activeRoomId?.let {
+            state.value.client?.getRoomUsers(it)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -79,18 +113,35 @@ fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
             .padding(8.dp)
     ) {
         Column {
-            Row(modifier = Modifier.weight(1f)) {
-                RoomList(state.value.client?.getRooms()?.map { it.keys.toList() })
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RoomList(
+                    state.value.client?.getRooms()?.flattenValues(),
+                    state.value.activeRoomId,
+                    onRoomClick = {
+                        if (activeRoomId != it)
+                            viewModel.setActiveRoom(it)
+                        else
+                            viewModel.setActiveRoom(null)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
                 TitleList(
                     "Messages",
-                    state.value.messages,
+                    state.value.mainMessages,
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(3f)
                         .fillMaxWidth()
                 ) {
-                    Text(it.getText(), color = it.getColor())
+                    MessageView(it)
                 }
-                TitleList("Users", emptyList<User>()) {
+                TitleList(
+                    "Users",
+                    roomUsers,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(it.name)
                 }
             }

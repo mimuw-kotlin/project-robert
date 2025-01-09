@@ -1,48 +1,57 @@
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import io.ktor.client.engine.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.Flow
-import net.folivo.trixnity.client.flattenValues
 import net.folivo.trixnity.client.store.Room
-import net.folivo.trixnity.client.store.RoomUser
 import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 import net.folivo.trixnity.core.model.RoomId
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Composable
-fun <T> TitleList(
-    header: String,
+fun <T> HeaderedList(
+    header: @Composable () -> Unit,
     items: List<T>,
     modifier: Modifier = Modifier,
-    composable: @Composable (T) -> Unit
+    item: @Composable (T) -> Unit,
 ) {
-    Column(modifier = modifier) {
-        Text(header, style = MaterialTheme.typography.h6)
-        LazyColumn {
-            items(items) { item ->
-                composable(item)
+    val scrollState = rememberLazyListState()
+
+    Box(modifier = modifier) {
+        Column {
+            header()
+            LazyColumn(state = scrollState) {
+                items(items) {
+                    item(it)
+                }
             }
         }
+        VerticalScrollbar(
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            adapter = rememberScrollbarAdapter(scrollState)
+        )
     }
 }
 
 @Composable
-fun MessageInput() {
+fun MessageInput(activeRoomId: RoomId?, onSend: (OutgoingMessage) -> Unit) {
     var messageInput by remember { mutableStateOf("") }
 
     Row(
@@ -57,8 +66,16 @@ fun MessageInput() {
             onValueChange = { messageInput = it }
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Button(
-            onClick = { messageInput = "" },
+        activeRoomId?.let {
+            Button(
+                onClick = { onSend(OutgoingMessage(messageInput, activeRoomId)) },
+                enabled = messageInput.isNotEmpty()
+            ) {
+                Text("Send")
+            }
+        } ?: Button(
+            onClick = { /* Do nothing, because there is no active room. */ },
+            enabled = false
         ) {
             Text("Send")
         }
@@ -67,45 +84,63 @@ fun MessageInput() {
 
 @Composable
 fun RoomList(
-    rooms: Flow<Set<Room>>?,
+    rooms: List<Room>,
     chosenRoom: RoomId?,
     onRoomClick: (RoomId) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val rooms_ by rooms?.collectAsState(initial = emptySet()) ?: mutableStateOf(emptySet())
-
-    TitleList("Rooms", rooms_.toList(), modifier = modifier) {
+    HeaderedList(
+        header = { Text("Rooms") },
+        rooms,
+        modifier = modifier
+    ) {
         Text(
             it.name?.explicitName ?: it.roomId.toString(),
             modifier = Modifier
                 .clickable(onClick = { onRoomClick(it.roomId) })
                 .fillMaxWidth(),
-            fontWeight = if (it.roomId == chosenRoom) FontWeight.Bold else  FontWeight.Normal)
+            fontWeight = if (it.roomId == chosenRoom) FontWeight.Bold else  FontWeight.Normal
+        )
     }
 }
 
 @Composable
-fun MessageView(message: Message) {
-    val timestamp = message.time.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-
+fun MessageView(body: String, color: Color) {
     Text(
-        text = "[$timestamp] ${message.text}",
-        color = message.getColor(),
+        text = body,
+        color = color,
     )
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
-    val state = viewModel.state.collectAsState()
-    val activeRoomId = state.value.activeRoomId
-    var roomUsersFlow by remember { mutableStateOf<Flow<List<RoomUser>>?>(null) }
-    val roomUsers by roomUsersFlow?.collectAsState(emptyList()) ?: mutableStateOf(emptyList())
+fun MainMessages(messages: List<LogMessage>, modifier: Modifier = Modifier) {
+    HeaderedList(
+        // Underscored title
+        header = { Text("Main") },
+        items = messages,
+        modifier = modifier,
+    ) {
+        MessageView(it.getFormatted(), it.getColor())
+    }
+}
 
-    LaunchedEffect(activeRoomId) {
-        roomUsersFlow = activeRoomId?.let {
-            state.value.client?.getRoomUsers(it)
+@Composable
+fun RoomMessages(room: String, messages: List<Flow<RoomMessage?>>, modifier: Modifier = Modifier) {
+    HeaderedList(
+        { Text(room, textDecoration = TextDecoration.Underline) },
+        items = messages,
+        modifier = modifier,
+    ) { messageFlow ->
+        messageFlow.collectAsState(null).value?.let { message ->
+            MessageView(message.getFormatted(), message.getColor())
         }
     }
+}
+
+@Composable
+fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
+    val state = viewModel.state.collectAsState().value
+    val activeRoomId = state.activeRoom?.roomId
 
     Box(
         modifier = Modifier
@@ -118,36 +153,31 @@ fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 RoomList(
-                    state.value.client?.getRooms()?.flattenValues(),
-                    state.value.activeRoomId,
+                    state.rooms.values.toList(),
+                    activeRoomId,
                     onRoomClick = {
-                        if (activeRoomId != it)
+                        if (it != activeRoomId)
                             viewModel.setActiveRoom(it)
                         else
                             viewModel.setActiveRoom(null)
                     },
                     modifier = Modifier.weight(1f)
                 )
-                TitleList(
-                    "Messages",
-                    state.value.mainMessages,
-                    modifier = Modifier
-                        .weight(3f)
-                        .fillMaxWidth()
-                ) {
-                    MessageView(it)
-                }
-                TitleList(
-                    "Users",
-                    roomUsers,
+
+                val messagesModifier = Modifier.weight(3f)
+                state.activeRoom?.let { activeRoom ->
+                    RoomMessages(viewModel.getRoomName(activeRoom.roomId), activeRoom.messages, messagesModifier)
+                } ?: MainMessages(state.mainMessages, messagesModifier)
+
+                HeaderedList(
+                    { Text("Users") },
+                    state.activeRoom?.users ?: emptyList(),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(it.name)
                 }
             }
-            Row {
-                MessageInput()
-            }
+            MessageInput(activeRoomId) { viewModel.send(it) }
         }
     }
 }
@@ -227,6 +257,7 @@ fun HiddenFormField(
 fun FrameWindowScope.KatrixMenuBar(
     onLogin: (Client.LoginData) -> Unit,
     onLogout: () -> Unit,
+    onDebug: () -> Unit,
     onQuit: () -> Unit,
 ) {
     MenuBar {
@@ -235,6 +266,7 @@ fun FrameWindowScope.KatrixMenuBar(
         Menu("File") {
             Item("Log in", onClick = { openLoginDialog = true })
             Item("Log out", onClick = onLogout)
+            Item("Debug", onClick = onDebug)
             Item("Quit", onClick = onQuit)
         }
 
@@ -259,10 +291,21 @@ fun main() = application {
             KatrixMenuBar(
                 onLogin = { viewModel.login(it, httpClientEngine) },
                 onLogout = { viewModel.logout() },
+                onDebug = { debugLogin(viewModel, httpClientEngine) },
                 onQuit = ::exitApplication
             )
-
             ChatScreen(viewModel)
         }
     }
+}
+
+fun debugLogin(viewModel: ChatViewModel, httpClientEngine: HttpClientEngine) {
+    viewModel.login(
+        Client.LoginData(
+            Url("http://localhost:8008"),
+            IdentifierType.User("aha"),
+            "@3%(BzJtj|LxA\\U-<N*N"
+        ),
+        httpClientEngine
+    )
 }

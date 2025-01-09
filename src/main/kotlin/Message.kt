@@ -2,33 +2,47 @@ import androidx.compose.ui.graphics.Color
 import net.folivo.trixnity.core.model.RoomId
 import java.time.Instant
 
-sealed class Message(
-    val text: String,
-    val time: Instant,
+sealed class LogMessage(
+    body: String,
+    time: Instant,
 ) {
+    private val formatted = "[$time]: $body"
+
+    fun getFormatted(): String {
+        return formatted
+    }
+
     abstract fun getColor(): Color
 }
 
 class RoomMessage(
-    text: String,
-    time: Instant,
-    private val roomId: RoomId,
-) : Message(text, time) {
-    fun getRoomId() = roomId
+    val body: String,
+    val time: Instant,
+) {
+    private val formatted = "[$time]: $body"
 
-    override fun getColor(): Color = Color.Black
+    fun getFormatted(): String {
+        return formatted
+    }
+
+    fun getColor(): Color = Color.Black
 }
+
+data class OutgoingMessage(
+    val body: String,
+    val roomId: RoomId
+)
 
 class InfoMessage(
     text: String,
     time: Instant
-) : Message(text, time) {
+) : LogMessage(text, time) {
     override fun getColor(): Color = Color.Blue
 }
 
 class ErrorMessage(
     text: String,
     time: Instant
-) : Message(text, time) {
+) : LogMessage(text, time) {
     override fun getColor(): Color = Color.Red
 }

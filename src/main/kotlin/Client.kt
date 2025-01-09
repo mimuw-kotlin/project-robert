@@ -1,12 +1,15 @@
 import io.ktor.client.engine.*
 import io.ktor.http.*
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.*
 import net.folivo.trixnity.client.*
 import net.folivo.trixnity.client.room.message.text
-import net.folivo.trixnity.client.store.Room
+import net.folivo.trixnity.client.room.toFlowList
 import net.folivo.trixnity.client.store.RoomUser
+import net.folivo.trixnity.client.store.originTimestamp
 import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 import net.folivo.trixnity.core.model.RoomId
+import net.folivo.trixnity.core.model.events.m.room.RoomMessageEventContent
+import java.time.Instant
 
 /**
  * A client that interacts with the Matrix server.
@@ -14,7 +17,6 @@ import net.folivo.trixnity.core.model.RoomId
 class Client(
     private val matrixClient: MatrixClient,
 ) : AutoCloseable {
-
     companion object {
         suspend fun login(loginData: LoginData, httpClientEngine: HttpClientEngine): Result<Client> {
             val cache = Cache.create()
@@ -39,8 +41,6 @@ class Client(
         }
     }
 
-    fun getRoom(roomId: RoomId): Flow<Room?> = matrixClient.room.getById(roomId)
-
     fun getRooms() = matrixClient.room.getAll()
 
     suspend fun getRoomUsers(roomId: RoomId): Flow<List<RoomUser>> {
@@ -48,8 +48,30 @@ class Client(
         return matrixClient.user.getAll(roomId).flattenValues()
     }
 
-    suspend fun send(message: RoomMessage) = matrixClient.room.sendMessage(message.getRoomId()) {
-        text(message.text)
+    suspend fun send(message: OutgoingMessage) = matrixClient.room.sendMessage(message.roomId) {
+        text(message.body)
+    }
+
+    fun getMessages(roomId: RoomId, maxSize: StateFlow<Int>): Flow<List<Flow<RoomMessage?>>> {
+        return matrixClient.room.getLastTimelineEvents(roomId)
+            .toFlowList(maxSize)
+            .map { events ->
+                events.map { eventFlow ->
+                    eventFlow
+                        .map { event ->
+                            event.content?.getOrNull()?.let { content ->
+                                if (content is RoomMessageEventContent) {
+                                    RoomMessage(
+                                        body = content.body,
+                                        time = Instant.ofEpochMilli(event.originTimestamp),
+                                    )
+                                } else {
+                                    null
+                                }
+                            }
+                        }
+                }
+            }.filterNotNull()
     }
 
     override fun close() {

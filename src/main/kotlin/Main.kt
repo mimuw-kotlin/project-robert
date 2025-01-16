@@ -30,14 +30,23 @@ fun <T> HeaderedList(
     header: @Composable () -> Unit,
     items: List<T>,
     modifier: Modifier = Modifier,
+    isOrderReversed: Boolean = false,
     item: @Composable (T) -> Unit,
 ) {
     val scrollState = rememberLazyListState()
 
+    LaunchedEffect (items) {
+        if (isOrderReversed && items.isNotEmpty())
+            scrollState.scrollToItem(items.size - 1)
+    }
+
     Box(modifier = modifier) {
         Column {
             header()
-            LazyColumn(state = scrollState) {
+            LazyColumn(
+                state = scrollState,
+                reverseLayout = isOrderReversed
+            ) {
                 items(items) {
                     item(it)
                 }
@@ -115,8 +124,7 @@ fun MessageView(body: String, color: Color) {
 @Composable
 fun MainMessages(messages: List<LogMessage>, modifier: Modifier = Modifier) {
     HeaderedList(
-        // Underscored title
-        header = { Text("Main") },
+        header = { Text("Main", textDecoration = TextDecoration.Underline) },
         items = messages,
         modifier = modifier,
     ) {
@@ -127,9 +135,10 @@ fun MainMessages(messages: List<LogMessage>, modifier: Modifier = Modifier) {
 @Composable
 fun RoomMessages(room: String, messages: List<Flow<RoomMessage?>>, modifier: Modifier = Modifier) {
     HeaderedList(
-        { Text(room, textDecoration = TextDecoration.Underline) },
+        header = { Text(room) },
         items = messages,
         modifier = modifier,
+        isOrderReversed = true,
     ) { messageFlow ->
         messageFlow.collectAsState(null).value?.let { message ->
             MessageView(message.getFormatted(), message.getColor())

@@ -6,7 +6,8 @@ import net.folivo.trixnity.core.model.RoomId
 import java.time.Instant
 
 class ChatViewModel {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val supervisorJob = SupervisorJob()
+    private val scope = CoroutineScope(supervisorJob + Dispatchers.IO)
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state
@@ -20,8 +21,8 @@ class ChatViewModel {
     private var isClientRunning = false
 
     fun login(loginData: Client.LoginData, httpClientEngine: HttpClientEngine) {
-        pushMainMessages(InfoMessage("Logging in...", Instant.now()))
         scope.launch {
+            pushMainMessages(InfoMessage("Logging in...", Instant.now()))
             Client.login(loginData, httpClientEngine).fold(
                 onSuccess = { client ->
                     pushMainMessages(InfoMessage("Logged in", Instant.now()))
@@ -55,7 +56,7 @@ class ChatViewModel {
 
     fun logout() {
         pushMainMessages(InfoMessage("Logging out...", Instant.now()))
-        scope.cancel()
+        supervisorJob.cancelChildren()
         _state.update { currentState ->
             currentState.copy(
                 rooms = emptyMap(),
@@ -72,7 +73,7 @@ class ChatViewModel {
                 fetchRooms(client)
             }
             launch {
-                fetchActiveRoomData(client)
+                handleEvents(client)
             }
         }
     }
@@ -102,7 +103,7 @@ class ChatViewModel {
         }
     }
 
-    private suspend fun fetchActiveRoomData(client: Client) {
+    private suspend fun handleEvents(client: Client) {
         var activeRoomJob: Job? = null
 
         uiEvents.collect { event ->

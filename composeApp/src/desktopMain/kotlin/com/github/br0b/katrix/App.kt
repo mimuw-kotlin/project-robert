@@ -1,23 +1,27 @@
-import androidx.compose.desktop.ui.tooling.preview.Preview
+package com.github.br0b.katrix
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.Button
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.FrameWindowScope
-import androidx.compose.ui.window.MenuBar
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.application
+import androidx.compose.ui.window.*
 import io.ktor.client.engine.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.http.*
@@ -159,7 +163,7 @@ fun UserList(users: List<RoomUser>) {
     }
 }
 
-@Preview
+@androidx.compose.desktop.ui.tooling.preview.Preview
 @Composable
 fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
     val state = viewModel.state.collectAsState().value
@@ -271,58 +275,8 @@ fun HiddenFormField(
 }
 
 @Composable
-fun FrameWindowScope.KatrixMenuBar(
-    onLogin: (Client.LoginData) -> Unit,
-    onLogout: () -> Unit,
-    onDebug: () -> Unit,
-    onQuit: () -> Unit,
-) {
-    MenuBar {
-        var openLoginDialog by remember { mutableStateOf(false) }
-
-        Menu("File") {
-            Item("Log in", onClick = { openLoginDialog = true })
-            Item("Log out", onClick = onLogout)
-            Item("Debug", onClick = onDebug)
-            Item("Quit", onClick = onQuit)
-        }
-
-        if (openLoginDialog) {
-            LoginDialog(
-                onLogin = {
-                    openLoginDialog = false
-                    onLogin(it)
-                },
-                onDismissRequest = { openLoginDialog = false }
-            )
-        }
+fun App(viewModel: ChatViewModel) {
+    MaterialTheme {
+        ChatScreen(viewModel)
     }
-}
-
-fun main() = application {
-    Window(onCloseRequest = ::exitApplication) {
-        MaterialTheme {
-            val viewModel = ChatViewModel()
-            val httpClientEngine = OkHttp.create()
-
-            KatrixMenuBar(
-                onLogin = { viewModel.login(it, httpClientEngine) },
-                onLogout = { viewModel.logout() },
-                onDebug = { debugLogin(viewModel, httpClientEngine) },
-                onQuit = ::exitApplication
-            )
-            ChatScreen(viewModel)
-        }
-    }
-}
-
-fun debugLogin(viewModel: ChatViewModel, httpClientEngine: HttpClientEngine) {
-    viewModel.login(
-        Client.LoginData(
-            Url("http://localhost:8008"),
-            IdentifierType.User("aha"),
-            "@3%(BzJtj|LxA\\U-<N*N"
-        ),
-        httpClientEngine
-    )
 }

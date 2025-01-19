@@ -2,6 +2,7 @@ package com.github.br0b.katrix
 
 import androidx.compose.ui.graphics.Color
 import net.folivo.trixnity.core.model.RoomId
+import net.folivo.trixnity.core.model.UserId
 import java.time.Instant
 
 sealed class LogMessage(
@@ -15,17 +16,28 @@ sealed class LogMessage(
     }
 
     abstract fun getColor(): Color
+
+    class InfoMessage(
+        text: String,
+        time: Instant
+    ) : LogMessage(text, time) {
+        override fun getColor(): Color = Color.Blue
+    }
+
+    class ErrorMessage(
+        text: String,
+        time: Instant
+    ) : LogMessage(text, time) {
+        override fun getColor(): Color = Color.Red
+    }
 }
 
 class RoomMessage(
-    val body: String,
-    val time: Instant,
+    private val body: String,
+    private val time: Instant,
+    val senderId: UserId,
 ) {
-    private val formatted = "[$time]: $body"
-
-    fun getFormatted(): String {
-        return formatted
-    }
+    fun getFormatted(sender: String) = "[$time] $sender: $body"
 
     fun getColor(): Color = Color.Black
 }
@@ -34,17 +46,3 @@ data class OutgoingMessage(
     val body: String,
     val roomId: RoomId
 )
-
-class InfoMessage(
-    text: String,
-    time: Instant
-) : LogMessage(text, time) {
-    override fun getColor(): Color = Color.Blue
-}
-
-class ErrorMessage(
-    text: String,
-    time: Instant
-) : LogMessage(text, time) {
-    override fun getColor(): Color = Color.Red
-}

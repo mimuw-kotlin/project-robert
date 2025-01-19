@@ -3,138 +3,77 @@ package com.github.br0b.katrix
 import io.ktor.client.engine.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import net.folivo.trixnity.client.flatten
+import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.core.model.RoomId
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
 
 class ChatViewModel {
     private val supervisorJob = SupervisorJob()
-    private val scope = CoroutineScope(supervisorJob + Dispatchers.IO)
+    private val scope = CoroutineScope(Dispatchers.Default + supervisorJob)
 
-    private val _state = MutableStateFlow(ChatState())
-    val state: StateFlow<ChatState> = _state
+    private val _state = MutableStateFlow(UiState())
+    val state: StateFlow<UiState> = _state
 
-    private val _uiEvents = MutableSharedFlow<UiEvent>()
-    private val uiEvents: SharedFlow<UiEvent> = _uiEvents
+    private val _clientData = MutableStateFlow<ClientData?>(null)
+    val clientData: StateFlow<ClientData?> = _clientData
 
-    private val _maxTimelineSize = MutableStateFlow(20)
-    private val maxTimelineSize: StateFlow<Int> = _maxTimelineSize
-
-    private var isClientRunning = false
+    private var client = AtomicReference<Client?>(null)
 
     fun login(loginData: Client.LoginData, httpClientEngine: HttpClientEngine) {
         scope.launch {
-            pushMainMessages(InfoMessage("Logging in...", Instant.now()))
+            pushMainMessages(LogMessage.InfoMessage("Logging in...", Instant.now()))
             Client.login(loginData, httpClientEngine).fold(
-                onSuccess = { client ->
-                    pushMainMessages(InfoMessage("Logged in", Instant.now()))
-                    isClientRunning = true
-                    launchClientJob(client)
-                },
-                onFailure = {
-                    pushMainMessages(ErrorMessage(it.message ?: "Unknown error", Instant.now()))
-                }
-            )
+                onSuccess = { onLoginSuccess(it) },
+                onFailure = { pushMainMessages(LogMessage.ErrorMessage(it.message ?: "Unknown error", Instant.now())) })
         }
-    }
-
-    fun send(message: OutgoingMessage) {
-        println("Sending message: $message")
-        scope.launch {
-            _uiEvents.emit(SendRequested(message))
-        }
-    }
-
-    fun setActiveRoom(roomId: RoomId?) {
-        scope.launch {
-            println("Setting active room to $roomId")
-            _uiEvents.emit(FetchRequested(roomId))
-        }
-    }
-
-    fun getRoomName(roomId: RoomId): String {
-        return state.value.rooms[roomId]?.name?.explicitName ?: roomId.toString()
     }
 
     fun logout() {
-        pushMainMessages(InfoMessage("Logging out...", Instant.now()))
+        pushMainMessages(LogMessage.InfoMessage("Logging out...", Instant.now()))
         supervisorJob.cancelChildren()
-        _state.update { currentState ->
-            currentState.copy(
-                rooms = emptyMap(),
-                activeRoom = null,
-            )
-        }
-        pushMainMessages(InfoMessage("Logged out", Instant.now()))
-        isClientRunning = false
+        _state.update { it.copy(activeRoomId = null) }
+        _clientData.update { null }
+        pushMainMessages(LogMessage.InfoMessage("Logged out", Instant.now()))
     }
 
-    private fun launchClientJob(client: Client) {
+    fun send(message: OutgoingMessage) {
         scope.launch {
-            launch {
-                fetchRooms(client)
-            }
-            launch {
-                handleEvents(client)
-            }
+            client.get()?.send(message)
         }
     }
 
-    private suspend fun fetchRooms(client: Client) {
-        val roomsFlow = client.getRooms().flatten()
-        roomsFlow.collect { rooms ->
-            println("Rooms fetched")
-            _state.update { currentState ->
-                currentState.copy(rooms = rooms.filter { it.value != null }.mapValues { it.value!! })
+    fun addRoom(name: String) {
+        client.get()?.let { client ->
+            scope.launch {
+                client.addRoom(name)
             }
-        }
+        } ?: pushMainMessages(LogMessage.ErrorMessage("Log in to add rooms!", Instant.now()))
     }
 
-    private suspend fun fetchActiveRoomUsers(client: Client, roomId: RoomId) {
-        client.getRoomUsers(roomId).collect { users ->
-            _state.update { currentState ->
-                currentState.copy(activeRoom = currentState.activeRoom?.copy(users = users))
-            }
-        }
-    }
+    fun setActiveRoom(roomId: RoomId?) {
+        _state.update { it.copy(activeRoomId = roomId) }
 
-    private suspend fun fetchActiveRoomMessages(client: Client, roomId: RoomId) {
-        client.getMessages(roomId, maxTimelineSize).collect { message ->
-            _state.update { currentState ->
-                currentState.copy(activeRoom = currentState.activeRoom?.copy(messages = message))}
-        }
-    }
+        scope.launch {
+            client.get()?.let { client ->
+                val activeRoomData = roomId?.let { client.getActiveRoomData(roomId) }
 
-    private suspend fun handleEvents(client: Client) {
-        var activeRoomJob: Job? = null
-
-        uiEvents.collect { event ->
-            println("UI event: $event")
-            when (event) {
-                is FetchRequested -> {
-                    activeRoomJob?.cancel()
-                    event.roomId?.let { roomId ->
-                        _state.update { currentState ->
-                            currentState.copy(activeRoom = RoomData(roomId, emptyList(), emptyList()))
-                        }
-                        activeRoomJob = scope.launch {
-                            launch {
-                                fetchActiveRoomUsers(client, roomId)
-                            }
-                            launch {
-                                fetchActiveRoomMessages(client, roomId)
-                            }
-                        }
-                    } ?: run {
-                        _state.update { currentState ->
-                            currentState.copy(activeRoom = null)
-                        }
-                    }
+                _clientData.update { currentClientData ->
+                    currentClientData?.copy(activeRoomData = activeRoomData) ?: ClientData(
+                        client.getRooms(),
+                        activeRoomData
+                    )
                 }
-                is SendRequested -> {
-                    client.send(event.message)
-                }
-            }
+            } ?: _clientData.update { null }
+        }
+    }
+
+    private fun onLoginSuccess(client: Client) {
+        pushMainMessages(LogMessage.InfoMessage("Logged in", Instant.now()))
+        this.client.set(client)
+        _state.update { it.copy(activeRoomId = null) }
+        scope.launch {
+            _clientData.update { ClientData(client.getRooms(), null) }
         }
     }
 
@@ -143,4 +82,20 @@ class ChatViewModel {
             currentState.copy(mainMessages = currentState.mainMessages + message)
         }
     }
+
+    fun leaveRoom(roomId: RoomId) {
+        scope.launch {
+            client.get()?.leaveRoom(roomId)
+        }
+    }
+
+    data class UiState(
+        val mainMessages: List<LogMessage> = emptyList(),
+        val activeRoomId: RoomId? = null,
+    )
+
+    data class ClientData(
+        val rooms: Flow<Map<RoomId, Flow<Room?>>>,
+        val activeRoomData: Client.RoomData? = null,
+    )
 }

@@ -3,14 +3,15 @@ package com.github.br0b.katrix
 import io.ktor.client.engine.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import net.folivo.trixnity.client.*
+import net.folivo.trixnity.client.room.Timeline
 import net.folivo.trixnity.client.room.message.text
-import net.folivo.trixnity.client.room.toFlowList
-import net.folivo.trixnity.client.store.RoomUser
-import net.folivo.trixnity.client.store.originTimestamp
-import net.folivo.trixnity.client.store.sender
+import net.folivo.trixnity.client.store.*
 import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 import net.folivo.trixnity.clientserverapi.model.rooms.DirectoryVisibility
+import net.folivo.trixnity.core.model.EventId
 import net.folivo.trixnity.core.model.RoomId
 import net.folivo.trixnity.core.model.UserId
 import net.folivo.trixnity.core.model.events.m.room.RoomMessageEventContent
@@ -34,35 +35,84 @@ class Client(
                 mediaStore = cache.getMediaStore(),
                 configuration = {
                     this.httpClientEngine = httpClientEngine
+                }).fold(onSuccess = { matrixClient ->
+                matrixClient.startSync()
+                Result.success(Client(matrixClient))
+            }, onFailure = {
+                Result.failure(it)
+            })
+        }
+
+        private fun eventTransformer(eventFlow: Flow<TimelineEvent>): Flow<RoomMessage?> {
+            return eventFlow.map { event ->
+                event.content?.getOrNull()?.let { content ->
+                    if (content is RoomMessageEventContent) {
+                        RoomMessage(
+                            body = content.body,
+                            time = Instant.ofEpochMilli(event.originTimestamp),
+                            senderId = event.sender
+                        )
+                    } else {
+                        null
+                    }
                 }
-            ).fold(
-                onSuccess = { matrixClient ->
-                    matrixClient.startSync()
-                    Result.success(Client(matrixClient))
-                },
-                onFailure = {
-                    Result.failure(it)
-                }
-            )
+            }
         }
     }
+
+    private val roomStateMap = mutableMapOf<RoomId, RoomState>()
+    private val mutex = Mutex()
 
     fun getRooms() = matrixClient.room.getAll()
 
     suspend fun addRoom(name: String) = matrixClient.api.room.createRoom(
-        name = name,
-        visibility = DirectoryVisibility.PUBLIC
+        name = name, visibility = DirectoryVisibility.PUBLIC
     )
 
     suspend fun leaveRoom(roomId: RoomId) = matrixClient.api.room.leaveRoom(roomId)
 
-    suspend fun getActiveRoomData(roomId: RoomId): RoomData {
-        return RoomData(
-            roomId = roomId,
-            name = matrixClient.room.getById(roomId).map { it?.name?.explicitName },
-            users = getRoomUsers(roomId),
-            messages = getMessages(roomId, MutableStateFlow(10)),
-        )
+    suspend fun getRoomData(roomId: RoomId, nInitMessages: Long): Flow<RoomData> {
+        mutex.withLock {
+            return roomStateMap.getOrPut(roomId) {
+                val timeline = getTimeline(roomId)
+                val startFrom = getLatestEventId(roomId)
+
+                timeline.init(
+                    startFrom = startFrom,
+                    configBefore = { this.maxSize = nInitMessages },
+                )
+
+                RoomState(
+                    combine(
+                        matrixClient.room.getById(roomId).map { it?.name?.explicitName },
+                        getRoomUsers(roomId).flatten(),
+                        timeline.state.map { it.elements }.flatten(),
+                        timeline.state.map { it.canLoadAfter },
+                    ) { name, users, messages, canLoadNewMessages ->
+                        RoomData(
+                            roomId = roomId,
+                            name = name,
+                            users = users,
+                            messages = messages,
+                            canLoadNewMessages = canLoadNewMessages,
+                        )
+                    },
+                    timeline = timeline,
+                    startFrom = startFrom,
+                    nMessagesBefore = nInitMessages,
+                )
+            }.data
+        }
+    }
+
+    suspend fun updateRoomData(roomId: RoomId) {
+        mutex.withLock {
+            roomStateMap[roomId]?.timeline?.loadAfter()
+        }
+    }
+
+    suspend fun send(message: OutgoingMessage) = matrixClient.room.sendMessage(message.roomId) {
+        text(message.body)
     }
 
     private suspend fun getRoomUsers(roomId: RoomId): Flow<Map<UserId, Flow<RoomUser?>>> {
@@ -70,32 +120,12 @@ class Client(
         return matrixClient.user.getAll(roomId)
     }
 
-    suspend fun send(message: OutgoingMessage) = matrixClient.room.sendMessage(message.roomId) {
-        text(message.body)
+    private suspend fun getLatestEventId(roomId: RoomId): EventId {
+        return matrixClient.room.getLastTimelineEvent(roomId).filterNotNull().first().first().eventId
     }
 
-    private fun getMessages(roomId: RoomId, maxSize: StateFlow<Int>): Flow<List<Flow<RoomMessage?>>> {
-        return matrixClient.room.getLastTimelineEvents(roomId)
-            .toFlowList(maxSize)
-            .map { events ->
-                events.map { eventFlow ->
-                    eventFlow
-                        .map { event ->
-                            event.content?.getOrNull()?.let { content ->
-                                if (content is RoomMessageEventContent) {
-                                    RoomMessage(
-                                        body = content.body,
-                                        time = Instant.ofEpochMilli(event.originTimestamp),
-                                        senderId = event.sender
-                                    )
-                                } else {
-                                    null
-                                }
-                            }
-                        }
-                }
-            }.filterNotNull()
-    }
+    private fun getTimeline(roomId: RoomId): Timeline<Flow<RoomMessage?>> =
+        matrixClient.room.getTimeline(roomId, ::eventTransformer)
 
     override fun close() {
         matrixClient.close()
@@ -107,10 +137,18 @@ class Client(
         val password: String,
     )
 
+    data class RoomState(
+        val data: Flow<RoomData>,
+        val timeline: Timeline<Flow<RoomMessage?>>,
+        val startFrom: EventId,
+        val nMessagesBefore: Long,
+    )
+
     data class RoomData(
         val roomId: RoomId,
-        val name: Flow<String?>,
-        val users: Flow<Map<UserId, Flow<RoomUser?>>>,
-        val messages: Flow<List<Flow<RoomMessage?>>>,
+        val name: String?,
+        val users: Map<UserId, RoomUser?>,
+        val messages: List<RoomMessage>,
+        val canLoadNewMessages: Boolean,
     )
 }

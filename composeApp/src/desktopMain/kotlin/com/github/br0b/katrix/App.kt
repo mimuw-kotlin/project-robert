@@ -21,7 +21,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.github.br0b.katrix.dialogs.AddRoomDialog
 import com.github.br0b.katrix.dialogs.ConfirmDialog
-import kotlinx.coroutines.flow.Flow
 import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.client.store.RoomUser
 import net.folivo.trixnity.core.model.RoomId
@@ -77,7 +76,7 @@ fun MessageInput(activeRoomId: RoomId?, onSend: (OutgoingMessage) -> Unit) {
         Spacer(modifier = Modifier.width(8.dp))
         activeRoomId?.let {
             Button(
-                onClick = { onSend(OutgoingMessage(messageInput, activeRoomId)) },
+                onClick = { onSend(OutgoingMessage(messageInput, activeRoomId)); messageInput = "" },
                 enabled = messageInput.isNotEmpty()
             ) {
                 Text("Send")
@@ -93,14 +92,13 @@ fun MessageInput(activeRoomId: RoomId?, onSend: (OutgoingMessage) -> Unit) {
 
 @Composable
 fun Rooms(
-    roomsFlow: Flow<Map<RoomId, Flow<Room?>>>?,
+    rooms: List<Room>,
     activeRoom: RoomId?,
     onRoomClick: (RoomId) -> Unit,
     onAddRoom: (String) -> Unit,
     onLeaveRoom: (RoomId) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val rooms = roomsFlow?.collectAsState(emptyMap())?.value?.toList() ?: emptyList()
     var isAdditionDialogOpen by remember { mutableStateOf(false) }
     var roomToLeave by remember { mutableStateOf<RoomId?>(null) }
 
@@ -109,13 +107,14 @@ fun Rooms(
         ScrollableList(
             rooms,
             modifier = modifier
-        ) { (id, room) ->
-            val roomName = room.collectAsState(null).value?.name?.explicitName
+        ) { room ->
+            val id = room.roomId
+            val roomName = room.name?.explicitName ?: id.toString()
 
             TextWithButton(
                 {
                     Text(
-                        roomName ?: id.toString(),
+                        roomName,
                         modifier = Modifier.clickable(onClick = { onRoomClick(id) }),
                         fontWeight = if (id == activeRoom) FontWeight.Bold else FontWeight.Normal
                     )
@@ -174,47 +173,53 @@ fun MainMessages(messages: List<LogMessage>, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun RoomMessages(roomData: Client.RoomData, modifier: Modifier = Modifier) {
-    val name = roomData.name.collectAsState(null).value
-    val messages = roomData.messages.collectAsState(emptyList()).value
-    val users = roomData.users.collectAsState(emptyMap()).value
+fun RoomMessages(
+    roomData: Client.RoomData,
+    onNewMessages: (RoomId) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val name = roomData.name
+    val users = roomData.users
+    val messages = roomData.messages
+    val canLoadNewMessages = roomData.canLoadNewMessages
+
+    if (canLoadNewMessages) {
+        onNewMessages(roomData.roomId)
+    }
 
     ScrollableListWithHeader(
         header = { Text(name ?: roomData.roomId.toString()) },
         modifier = modifier
     ) {
         ScrollableList(
-            items = messages,
+            items = messages.reversed(),
             isOrderReversed = true,
-        ) { messageFlow ->
-            messageFlow.collectAsState(null).value?.let { message ->
-                val senderId = message.senderId
-                val sender = users[senderId]?.collectAsState(null)?.value?.name ?: senderId.toString()
+        ) { message ->
+            val senderId = message.senderId
+            val sender = users[senderId]?.name ?: senderId.toString()
 
-                MessageView(message.getFormatted(sender), message.getColor())
-            }
+            MessageView(message.getFormatted(sender), message.getColor())
         }
     }
 }
 
 @Composable
-fun Users(usersFlow: Flow<Map<UserId, Flow<RoomUser?>>>?, modifier: Modifier = Modifier) {
-    val users = usersFlow?.collectAsState(emptyMap())?.value ?: emptyMap()
+fun Users(users: Map<UserId, RoomUser?>, modifier: Modifier = Modifier) {
 
     Column(modifier) {
         Text("Users")
-        ScrollableList(users.toList()) { (id, userFlow) ->
-            val userName = userFlow.collectAsState(null).value?.name ?: id.toString()
-            Text(userName)
-        }
+        ScrollableList(users.entries.toList()) { (id, user) -> Text(user?.name ?: id.toString()) }
     }
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
+fun ChatScreen(viewModel: ChatViewModel) {
     val state = viewModel.state.collectAsState().value
-    val clientData = viewModel.clientData.collectAsState().value
-    val activeRoomId = state.activeRoomId
+    val clientData = viewModel.clientData.collectAsState(null).value
+    val rooms = clientData?.rooms?.collectAsState(emptyList())?.value ?: emptyList()
+    val activeRoom = clientData?.activeRoomData?.collectAsState(null)?.value
+    val activeRoomId = activeRoom?.roomId
+    val users = activeRoom?.users ?: emptyMap()
 
     Box(
         modifier = Modifier
@@ -227,7 +232,7 @@ fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Rooms(
-                    clientData?.rooms,
+                    rooms,
                     activeRoomId,
                     onRoomClick = {
                         if (it != activeRoomId)
@@ -242,12 +247,12 @@ fun ChatScreen(viewModel: ChatViewModel = ChatViewModel()) {
 
 
                 Box(modifier = Modifier.weight(3f)) {
-                    clientData?.activeRoomData?.let { activeRoomData ->
-                        RoomMessages(activeRoomData)
+                    activeRoom?.let { activeRoomData ->
+                        RoomMessages(activeRoomData, { viewModel.fetchNewMessages(it) })
                     } ?: MainMessages(state.mainMessages)
                 }
 
-                Users(clientData?.activeRoomData?.users, Modifier.weight(1f))
+                Users(users, Modifier.weight(1f))
             }
             MessageInput(activeRoomId) { viewModel.send(it) }
         }

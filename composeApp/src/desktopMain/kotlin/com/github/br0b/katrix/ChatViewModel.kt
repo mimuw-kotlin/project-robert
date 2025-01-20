@@ -3,22 +3,24 @@ package com.github.br0b.katrix
 import io.ktor.client.engine.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import net.folivo.trixnity.client.flattenValues
 import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.core.model.RoomId
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicReference
 
-class ChatViewModel {
+class ChatViewModel(
+    config: Config.() -> Unit = {},
+) {
+    private val config = Config().apply(config)
+
     private val supervisorJob = SupervisorJob()
-    private val scope = CoroutineScope(Dispatchers.Default + supervisorJob)
+    private val scope = CoroutineScope(Dispatchers.IO + supervisorJob)
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
-    private val _clientData = MutableStateFlow<ClientData?>(null)
-    val clientData: StateFlow<ClientData?> = _clientData
-
-    private var client = AtomicReference<Client?>(null)
+    private val clientState = MutableStateFlow<ClientState?>(null)
+    val clientData: Flow<ClientData?> = clientState.map { it?.data }
 
     fun login(loginData: Client.LoginData, httpClientEngine: HttpClientEngine) {
         scope.launch {
@@ -32,49 +34,59 @@ class ChatViewModel {
     fun logout() {
         pushMainMessages(LogMessage.InfoMessage("Logging out...", Instant.now()))
         supervisorJob.cancelChildren()
-        _state.update { it.copy(activeRoomId = null) }
-        _clientData.update { null }
+        clientState.update { null }
         pushMainMessages(LogMessage.InfoMessage("Logged out", Instant.now()))
     }
 
     fun send(message: OutgoingMessage) {
         scope.launch {
-            client.get()?.send(message)
+            clientState.value?.client?.send(message)
         }
     }
 
     fun addRoom(name: String) {
-        client.get()?.let { client ->
+        clientState.value?.client?.let { client ->
             scope.launch {
                 client.addRoom(name)
             }
         } ?: pushMainMessages(LogMessage.ErrorMessage("Log in to add rooms!", Instant.now()))
     }
 
+    /**
+     * If roomId is null, the active room is set to null.
+     * Otherwise, the active room is set to the room with the given roomId.
+     */
     fun setActiveRoom(roomId: RoomId?) {
-        _state.update { it.copy(activeRoomId = roomId) }
-
         scope.launch {
-            client.get()?.let { client ->
-                val activeRoomData = roomId?.let { client.getActiveRoomData(roomId) }
-
-                _clientData.update { currentClientData ->
-                    currentClientData?.copy(activeRoomData = activeRoomData) ?: ClientData(
-                        client.getRooms(),
-                        activeRoomData
+            clientState.update {
+                it?.let { currentClientState ->
+                    val newActiveRoomData = roomId?.let { roomId ->
+                        currentClientState.client.getRoomData(roomId, config.nInitialRoomMessages)
+                    }
+                    println("newActiveRoomData: $newActiveRoomData")
+                    currentClientState.copy(
+                        data = currentClientState.data.copy(
+                            activeRoomData = newActiveRoomData
+                        )
                     )
                 }
-            } ?: _clientData.update { null }
+            }
+        }
+    }
+
+    fun fetchNewMessages(roomId: RoomId) {
+        scope.launch {
+            clientState.value?.client?.updateRoomData(roomId)
         }
     }
 
     private fun onLoginSuccess(client: Client) {
         pushMainMessages(LogMessage.InfoMessage("Logged in", Instant.now()))
-        this.client.set(client)
-        _state.update { it.copy(activeRoomId = null) }
-        scope.launch {
-            _clientData.update { ClientData(client.getRooms(), null) }
+        val rooms = client.getRooms().flattenValues().map {
+            println("Fetching rooms...")
+            it.toList()
         }
+        clientState.update { ClientState(client, ClientData(rooms, null)) }
     }
 
     private fun pushMainMessages(message: LogMessage) {
@@ -85,17 +97,25 @@ class ChatViewModel {
 
     fun leaveRoom(roomId: RoomId) {
         scope.launch {
-            client.get()?.leaveRoom(roomId)
+            clientState.value?.client?.leaveRoom(roomId)
         }
     }
 
     data class UiState(
         val mainMessages: List<LogMessage> = emptyList(),
-        val activeRoomId: RoomId? = null,
+    )
+
+    data class ClientState(
+        val client: Client,
+        val data: ClientData,
     )
 
     data class ClientData(
-        val rooms: Flow<Map<RoomId, Flow<Room?>>>,
-        val activeRoomData: Client.RoomData? = null,
+        val rooms: Flow<List<Room>>,
+        val activeRoomData: Flow<Client.RoomData>?,
+    )
+
+    data class Config(
+        val nInitialRoomMessages: Long = 10,
     )
 }

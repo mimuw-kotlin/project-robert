@@ -60,10 +60,10 @@ class Client(
         }
     }
 
-    private val roomStateMap = mutableMapOf<RoomId, RoomState>()
+    private val timelineMap = mutableMapOf<RoomId, Timeline<Flow<RoomMessage?>>>()
     private val mutex = Mutex()
 
-    fun getRooms() = matrixClient.room.getAll()
+    fun getRooms() = matrixClient.room.getAll().flattenValues().map(Set<Room>::toList)
 
     suspend fun addRoom(name: String) = matrixClient.api.room.createRoom(
         name = name, visibility = DirectoryVisibility.PUBLIC
@@ -71,43 +71,46 @@ class Client(
 
     suspend fun leaveRoom(roomId: RoomId) = matrixClient.api.room.leaveRoom(roomId)
 
-    suspend fun getRoomData(roomId: RoomId, nInitMessages: Long): Flow<RoomData> {
+    suspend fun getRoomFlow(roomId: RoomId, nInitMessages: Long): Flow<RoomState> {
         mutex.withLock {
-            return roomStateMap.getOrPut(roomId) {
-                val timeline = getTimeline(roomId)
-                val startFrom = getLatestEventId(roomId)
+            val timeline = timelineMap.getOrPut(roomId) {
+                getTimeline(roomId).apply {
+                    val startFrom = getLatestEventId(roomId)
 
-                timeline.init(
-                    startFrom = startFrom,
-                    configBefore = { this.maxSize = nInitMessages },
-                )
+                    init(
+                        startFrom = startFrom,
+                        configBefore = { this.maxSize = nInitMessages },
+                    )
+                }
+            }
 
+            return combine(
+                matrixClient.room.getById(roomId).map { it?.name?.explicitName },
+                getRoomUsers(roomId).flatten(),
+                timeline.state.map { it.elements }.flatten(),
+                timeline.state.map { it.canLoadBefore },
+                timeline.state.map { it.canLoadAfter },
+            ) { name, users, messages, canLoadOldMessages, canLoadNewMessages ->
                 RoomState(
-                    combine(
-                        matrixClient.room.getById(roomId).map { it?.name?.explicitName },
-                        getRoomUsers(roomId).flatten(),
-                        timeline.state.map { it.elements }.flatten(),
-                        timeline.state.map { it.canLoadAfter },
-                    ) { name, users, messages, canLoadNewMessages ->
-                        RoomData(
-                            roomId = roomId,
-                            name = name,
-                            users = users,
-                            messages = messages,
-                            canLoadNewMessages = canLoadNewMessages,
-                        )
-                    },
-                    timeline = timeline,
-                    startFrom = startFrom,
-                    nMessagesBefore = nInitMessages,
+                    name,
+                    users,
+                    messages,
+                    canLoadOldMessages,
+                    canLoadNewMessages,
                 )
-            }.data
+            }
         }
     }
 
-    suspend fun updateRoomData(roomId: RoomId) {
+    suspend fun loadOldMessages(roomId: RoomId, maxNMessages: Long) {
         mutex.withLock {
-            roomStateMap[roomId]?.timeline?.loadAfter()
+            timelineMap[roomId]?.loadBefore { this.maxSize = maxNMessages }
+        }
+    }
+
+    suspend fun loadNewMessages(roomId: RoomId) {
+        mutex.withLock {
+            timelineMap[roomId]?.loadAfter()
         }
     }
 
@@ -138,17 +141,10 @@ class Client(
     )
 
     data class RoomState(
-        val data: Flow<RoomData>,
-        val timeline: Timeline<Flow<RoomMessage?>>,
-        val startFrom: EventId,
-        val nMessagesBefore: Long,
-    )
-
-    data class RoomData(
-        val roomId: RoomId,
-        val name: String?,
-        val users: Map<UserId, RoomUser?>,
-        val messages: List<RoomMessage>,
-        val canLoadNewMessages: Boolean,
+        val name: String? = null,
+        val users: Map<UserId, RoomUser?> = emptyMap(),
+        val messages: List<RoomMessage> = emptyList(),
+        val canLoadOldMessages: Boolean = false,
+        val canLoadNewMessages: Boolean = false,
     )
 }

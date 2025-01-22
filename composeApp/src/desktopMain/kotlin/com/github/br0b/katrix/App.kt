@@ -21,10 +21,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.github.br0b.katrix.dialogs.AddRoomDialog
 import com.github.br0b.katrix.dialogs.ConfirmDialog
+import kotlinx.coroutines.flow.StateFlow
 import net.folivo.trixnity.client.store.Room
-import net.folivo.trixnity.client.store.RoomUser
 import net.folivo.trixnity.core.model.RoomId
-import net.folivo.trixnity.core.model.UserId
 
 @Composable
 fun <T> ScrollableList(
@@ -92,13 +91,14 @@ fun MessageInput(activeRoomId: RoomId?, onSend: (OutgoingMessage) -> Unit) {
 
 @Composable
 fun Rooms(
-    rooms: List<Room>,
+    roomsState: StateFlow<List<Room>>,
     activeRoom: RoomId?,
     onRoomClick: (RoomId) -> Unit,
     onAddRoom: (String) -> Unit,
     onLeaveRoom: (RoomId) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val rooms by roomsState.collectAsState()
     var isAdditionDialogOpen by remember { mutableStateOf(false) }
     var roomToLeave by remember { mutableStateOf<RoomId?>(null) }
 
@@ -174,37 +174,41 @@ fun MainMessages(messages: List<LogMessage>, modifier: Modifier = Modifier) {
 
 @Composable
 fun RoomMessages(
-    roomData: Client.RoomData,
-    onNewMessages: (RoomId) -> Unit,
+    roomState: Client.RoomState,
+    onLoadOldMessages: () -> Unit,
+    onLoadNewMessages: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val name = roomData.name
-    val users = roomData.users
-    val messages = roomData.messages
-    val canLoadNewMessages = roomData.canLoadNewMessages
+    println("[RoomMessages] Room name: ${roomState.name}")
 
-    if (canLoadNewMessages) {
-        onNewMessages(roomData.roomId)
+    if (roomState.canLoadNewMessages) {
+        onLoadNewMessages()
     }
 
     ScrollableListWithHeader(
-        header = { Text(name ?: roomData.roomId.toString()) },
+        header = { Text(roomState.name ?: "Loading...") },
         modifier = modifier
     ) {
-        ScrollableList(
-            items = messages.reversed(),
-            isOrderReversed = true,
-        ) { message ->
-            val senderId = message.senderId
-            val sender = users[senderId]?.name ?: senderId.toString()
+        Column {
+            if (roomState.canLoadOldMessages) {
+                // TODO
+            }
+            ScrollableList(
+                items = roomState.messages.reversed(),
+                isOrderReversed = true,
+            ) { message ->
+                val senderId = message.senderId
+                val sender = roomState.users[senderId]?.name ?: senderId.toString()
 
-            MessageView(message.getFormatted(sender), message.getColor())
+                MessageView(message.getFormatted(sender), message.getColor())
+            }
         }
     }
 }
 
 @Composable
-fun Users(users: Map<UserId, RoomUser?>, modifier: Modifier = Modifier) {
+fun Users(roomState: Client.RoomState?, modifier: Modifier = Modifier) {
+    val users = roomState?.users ?: emptyMap()
 
     Column(modifier) {
         Text("Users")
@@ -214,12 +218,9 @@ fun Users(users: Map<UserId, RoomUser?>, modifier: Modifier = Modifier) {
 
 @Composable
 fun ChatScreen(viewModel: ChatViewModel) {
-    val state = viewModel.state.collectAsState().value
-    val clientData = viewModel.clientData.collectAsState(null).value
-    val rooms = clientData?.rooms?.collectAsState(emptyList())?.value ?: emptyList()
-    val activeRoom = clientData?.activeRoomData?.collectAsState(null)?.value
-    val activeRoomId = activeRoom?.roomId
-    val users = activeRoom?.users ?: emptyMap()
+    val uiState by viewModel.uiState.collectAsState()
+    val activeRoomState by viewModel.activeRoomState.collectAsState()
+    val activeRoomId = uiState.activeRoomId
 
     Box(
         modifier = Modifier
@@ -232,14 +233,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Rooms(
-                    rooms,
+                    viewModel.roomsState,
                     activeRoomId,
-                    onRoomClick = {
-                        if (it != activeRoomId)
-                            viewModel.setActiveRoom(it)
-                        else
-                            viewModel.setActiveRoom(null)
-                    },
+                    onRoomClick = { viewModel.setActiveRoom(it) },
                     onAddRoom = { name -> viewModel.addRoom(name) },
                     onLeaveRoom = { viewModel.leaveRoom(it) },
                     modifier = Modifier.weight(1f)
@@ -247,12 +243,16 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
 
                 Box(modifier = Modifier.weight(3f)) {
-                    activeRoom?.let { activeRoomData ->
-                        RoomMessages(activeRoomData, { viewModel.fetchNewMessages(it) })
-                    } ?: MainMessages(state.mainMessages)
+                    activeRoomState?.let { activeRoomData ->
+                        RoomMessages(
+                            roomState = activeRoomData,
+                            onLoadOldMessages = { viewModel.fetchOldMessages() },
+                            onLoadNewMessages = { viewModel.fetchNewMessages() }
+                        )
+                    } ?: MainMessages(uiState.mainMessages)
                 }
 
-                Users(users, Modifier.weight(1f))
+                Users(activeRoomState, Modifier.weight(1f))
             }
             MessageInput(activeRoomId) { viewModel.send(it) }
         }

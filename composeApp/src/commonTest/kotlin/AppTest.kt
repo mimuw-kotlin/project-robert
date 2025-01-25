@@ -8,20 +8,21 @@ import org.junit.Test
 class AppTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
-    fun loginTest() = runComposeUiTest {
-        setContent {
-            MaterialTheme {
-                ChatScreen(ChatViewModel(), OkHttp.create())
+    fun loginTest() =
+        runComposeUiTest {
+            setContent {
+                MaterialTheme {
+                    ChatScreen(ChatViewModel(), OkHttp.create())
+                }
             }
-        }
 
-        onNodeWithTag("LOGIN_BUTTON").performClick()
-        waitUntil { onNodeWithText("Homeserver").isDisplayed() }
-        onNodeWithTag("HOMESERVER_INPUT").performTextInput("http://localhost:8008")
-        onNodeWithTag("USERNAME_INPUT").performTextInput("aha")
-        onNodeWithTag("PASSWORD_INPUT").performTextInput("@3%(BzJtj|LxA\\U-<N*N")
-        onNodeWithTag("LOGIN_DIALOG_BUTTON").performClick()
-        waitUntilAtLeastOneExists(hasTestTag("LOGOUT_BUTTON"), 5000)
-        onNodeWithTag("LOGOUT_BUTTON").assertIsDisplayed()
-    }
+            onNodeWithTag("LOGIN_BUTTON").performClick()
+            waitUntil { onNodeWithText("Homeserver").isDisplayed() }
+            onNodeWithTag("HOMESERVER_INPUT").performTextInput("http://localhost:8008")
+            onNodeWithTag("USERNAME_INPUT").performTextInput("aha")
+            onNodeWithTag("PASSWORD_INPUT").performTextInput("@3%(BzJtj|LxA\\U-<N*N")
+            onNodeWithTag("LOGIN_DIALOG_BUTTON").performClick()
+            waitUntilAtLeastOneExists(hasTestTag("LOGOUT_BUTTON"), 5000)
+            onNodeWithTag("LOGOUT_BUTTON").assertIsDisplayed()
+        }
 }

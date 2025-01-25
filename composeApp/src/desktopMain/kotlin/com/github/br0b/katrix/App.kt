@@ -111,7 +111,7 @@ fun Rooms(
     Column {
         TextWithButton({ Text("Rooms") }, "+", onClick = { isAdditionDialogOpen = true })
         ScrollableList(
-            rooms.filter { it.membership == Membership.JOIN},
+            rooms.filter { it.membership == Membership.JOIN },
         ) { room ->
             val id = room.roomId
             val roomName = room.name?.explicitName ?: id.toString()
@@ -344,7 +344,6 @@ fun TextWithButton(
                 Modifier.width(24.dp).clickable(onClick = onClick)
                     .align(Alignment.CenterVertically),
         ) {
-
             Text(buttonText, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
     }

@@ -102,6 +102,7 @@ class Client(
                 timeline.state.map { it.canLoadAfter },
             ) { name, users, messages, canLoadOldMessages, canLoadNewMessages ->
                 RoomState(
+                    roomId,
                     name,
                     users,
                     messages,
@@ -133,6 +134,8 @@ class Client(
             text(message.body)
         }
 
+    fun getUserId() = matrixClient.userId
+
     private suspend fun getRoomUsers(roomId: RoomId): Flow<Map<UserId, Flow<RoomUser?>>> {
         matrixClient.user.loadMembers(roomId)
         return matrixClient.user.getAll(roomId)
@@ -155,6 +158,7 @@ class Client(
     )
 
     data class RoomState(
+        val id: RoomId,
         val name: String? = null,
         val users: Map<UserId, RoomUser?> = emptyMap(),
         val messages: List<RoomMessage> = emptyList(),

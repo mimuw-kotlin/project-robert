@@ -7,35 +7,53 @@ import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.core.model.RoomId
 import java.time.Instant
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModel(
     config: Config.() -> Unit = {},
 ) {
-    private val scope = CoroutineScope(Dispatchers.IO)
-    private val config = Config().apply(config)
-    private val roomStateMap = mutableMapOf<RoomId, Flow<Client.RoomState>>()
+    private val _scope = CoroutineScope(Dispatchers.IO)
+    private val _config = Config().apply(config)
 
-    private var client: Client? = null
+    // Used for communication with jobs.
+    private val _client = MutableStateFlow<Client?>(null)
+    private val _activeRoomFlow = MutableStateFlow<Flow<Client.RoomState>?>(null)
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState
 
-    // TODO
-    val username: StateFlow<String?> = MutableStateFlow(null)
+    private val _username = MutableStateFlow<String?>(null)
+    val username: StateFlow<String?> = _username
 
     private val _activeRoomState = MutableStateFlow<Client.RoomState?>(null)
     val activeRoomState: StateFlow<Client.RoomState?> = _activeRoomState
-    private var activeRoomStateJob: Job? = null
 
     private val _roomsState = MutableStateFlow(emptyList<Room>())
     val roomsState: StateFlow<List<Room>> = _roomsState
-    private var roomsStateJob: Job? = null
+
+    init {
+        // Update active room state.
+        _scope.launch {
+            _activeRoomFlow.flatMapLatest {
+                it ?: flowOf(null)
+            }.collect { room ->
+                _activeRoomState.update { room }
+            }
+        }
+
+        // Update rooms state.
+        _scope.launch {
+            _client.flatMapLatest { it?.getRooms() ?: flowOf(emptyList()) }.collect { rooms ->
+                _roomsState.update { rooms }
+            }
+        }
+    }
 
     fun login(
         loginData: Client.LoginData,
         httpClientEngine: HttpClientEngine,
     ) {
-        scope.launch {
-            if (client != null) {
+        _scope.launch {
+            if (_client.value != null) {
                 pushMainMessages(LogMessage.ErrorMessage("Already logged in", Instant.now()))
             } else {
                 pushMainMessages(LogMessage.InfoMessage("Logging in...", Instant.now()))
@@ -64,19 +82,13 @@ class ChatViewModel(
 
     fun logout() {
         pushMainMessages(LogMessage.InfoMessage("Logging out...", Instant.now()))
-        scope.launch {
-            roomsStateJob?.cancel()
-            roomsStateJob?.join()
-            activeRoomStateJob?.cancel()
-            activeRoomStateJob?.join()
-            client?.close()
-            client = null
-            roomStateMap.clear()
-            _uiState.update { it.copy(activeRoomId = null) }
-            _activeRoomState.update { null }
-            _roomsState.update { emptyList() }
-            pushMainMessages(LogMessage.InfoMessage("Logged out", Instant.now()))
-        }
+        _client.value?.close()
+        _client.update { null }
+        _uiState.update { it.copy(activeRoomId = null) }
+        _username.update { null }
+        _activeRoomState.update { null }
+        _roomsState.update { emptyList() }
+        pushMainMessages(LogMessage.InfoMessage("Logged out", Instant.now()))
     }
 
     /**
@@ -84,40 +96,24 @@ class ChatViewModel(
      * Otherwise, the active room is set to the room with the given roomId.
      */
     fun setActiveRoom(roomId: RoomId?) {
-        scope.launch {
-            val newRoomId = if (_uiState.value.activeRoomId == roomId) null else roomId
+        val newRoomId = if (_uiState.value.activeRoomId == roomId) null else roomId
 
-            val activeRoomFlow =
+        _uiState.update { currentUiState ->
+            currentUiState.copy(activeRoomId = newRoomId)
+        }
+
+        _scope.launch {
+            _activeRoomFlow.update {
                 newRoomId?.let { roomId ->
-                    client?.getRoomFlow(roomId, config.nMessageBatchSize)
+                    _client.value?.getRoomFlow(roomId, _config.nMessageBatchSize)
                 }
-
-            _uiState.update { currentUiState ->
-                currentUiState.copy(activeRoomId = newRoomId)
             }
-
-            activeRoomStateJob?.cancel()
-            activeRoomStateJob?.join()
-            println("Previous active room state job cancelled")
-            activeRoomStateJob =
-                scope.launch {
-                    activeRoomFlow?.let { flow ->
-                        _activeRoomState.update { Client.RoomState() }
-                        println("[activeRoomState]: Collecting new room state from $activeRoomFlow")
-                        flow.collect { newActiveRoomState ->
-                            _activeRoomState.update {
-                                println("[activeRoomState]: Collected new room state: $newActiveRoomState")
-                                newActiveRoomState
-                            }
-                        }
-                    } ?: _activeRoomState.update { null }
-                }
         }
     }
 
     fun addRoom(name: String) {
-        scope.launch {
-            client?.addRoom(name) ?: pushMainMessages(
+        _scope.launch {
+            _client.value?.addRoom(name) ?: pushMainMessages(
                 LogMessage.ErrorMessage(
                     "Log in to add rooms!",
                     Instant.now(),
@@ -127,42 +123,40 @@ class ChatViewModel(
     }
 
     fun leaveRoom(roomId: RoomId) {
-        scope.launch {
-            client?.leaveRoom(roomId)
+        _scope.launch {
+            _client.value?.leaveRoom(roomId)
+        }
+
+        if (_uiState.value.activeRoomId == roomId) {
+            setActiveRoom(null)
         }
     }
 
     fun send(message: OutgoingMessage) {
-        scope.launch {
-            client?.send(message)
+        _scope.launch {
+            _client.value?.send(message)
         }
     }
 
     fun fetchOldMessages() {
-        scope.launch {
+        _scope.launch {
             _uiState.value.activeRoomId?.let { roomId ->
-                client?.loadOldMessages(roomId, config.nMessageBatchSize)
+                _client.value?.loadOldMessages(roomId, _config.nMessageBatchSize)
             }
         }
     }
 
     fun fetchNewMessages() {
-        scope.launch {
+        _scope.launch {
             _uiState.value.activeRoomId?.let { roomId ->
-                client?.loadNewMessages(roomId)
+                _client.value?.loadNewMessages(roomId)
             }
         }
     }
 
     private fun onLoginSuccess(client: Client) {
-        pushMainMessages(LogMessage.InfoMessage("Logged in", Instant.now()))
-        this.client = client
-        roomsStateJob =
-            scope.launch {
-                client.getRooms().collect { newRooms ->
-                    _roomsState.update { newRooms }
-                }
-            }
+        _client.update { client }
+        _username.update { client.getUserId().toString() }
     }
 
     private fun pushMainMessages(message: LogMessage) {

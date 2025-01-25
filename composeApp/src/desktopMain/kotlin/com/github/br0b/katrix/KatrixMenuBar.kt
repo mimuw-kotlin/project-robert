@@ -6,7 +6,6 @@ import androidx.compose.ui.window.MenuBar
 import com.github.br0b.katrix.dialogs.LoginDialog
 import io.ktor.client.engine.*
 import io.ktor.http.*
-import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 
 @Composable
 fun FrameWindowScope.KatrixMenuBar(

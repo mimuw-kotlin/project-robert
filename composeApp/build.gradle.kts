@@ -43,6 +43,15 @@ kotlin {
     }
 }
 
+ktlint {
+    filter {
+        exclude { element ->
+            val path = element.file.path
+            path.contains("/build/")
+        }
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "com.github.br0b.katrix.MainKt"

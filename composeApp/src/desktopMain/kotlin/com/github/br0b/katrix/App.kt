@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.github.br0b.katrix.dialogs.AddRoomDialog
@@ -25,6 +26,7 @@ import io.ktor.client.engine.*
 import kotlinx.coroutines.flow.StateFlow
 import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.core.model.RoomId
+import net.folivo.trixnity.core.model.events.m.room.Membership
 
 @Composable
 fun <T> ScrollableList(
@@ -100,17 +102,15 @@ fun Rooms(
     onRoomClick: (RoomId) -> Unit,
     onAddRoom: (String) -> Unit,
     onLeaveRoom: (RoomId) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val rooms by roomsState.collectAsState()
     var isAdditionDialogOpen by remember { mutableStateOf(false) }
     var roomToLeave by remember { mutableStateOf<RoomId?>(null) }
 
-    Column(modifier = modifier) {
+    Column {
         TextWithButton({ Text("Rooms") }, "+", onClick = { isAdditionDialogOpen = true })
         ScrollableList(
-            rooms,
-            modifier = modifier,
+            rooms.filter { it.membership == Membership.JOIN},
         ) { room ->
             val id = room.roomId
             val roomName = room.name?.explicitName ?: id.toString()
@@ -195,8 +195,6 @@ fun RoomMessages(
     onLoadNewMessages: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    println("[RoomMessages] Room name: ${roomState.name}")
-
     if (roomState.canLoadNewMessages) {
         onLoadNewMessages()
     }
@@ -248,12 +246,14 @@ fun UserStatus(
 
     usernameFlow.collectAsState().value?.let { username ->
         Surface {
-            Text(username)
-            Button(onClick = onLogout) {
-                Text("Logout")
+            Column {
+                Text(username)
+                Button(onClick = onLogout) {
+                    Text("Logout")
+                }
             }
         }
-    } ?: Button(onClick = { /* Do nothing, because there is no active room. */ }) {
+    } ?: Button(onClick = { showLoginDialog = true }) {
         Text("Login")
     }
 
@@ -269,7 +269,10 @@ fun UserStatus(
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel, clientEngine: HttpClientEngine) {
+fun ChatScreen(
+    viewModel: ChatViewModel,
+    clientEngine: HttpClientEngine,
+) {
     val uiState by viewModel.uiState.collectAsState()
     val activeRoomState by viewModel.activeRoomState.collectAsState()
     val activeRoomId = uiState.activeRoomId
@@ -291,7 +294,6 @@ fun ChatScreen(viewModel: ChatViewModel, clientEngine: HttpClientEngine) {
                     onRoomClick = { viewModel.setActiveRoom(it) },
                     onAddRoom = { name -> viewModel.addRoom(name) },
                     onLeaveRoom = { viewModel.leaveRoom(it) },
-                    modifier = Modifier.weight(1f),
                 )
 
                 Box(modifier = Modifier.weight(3f)) {
@@ -319,7 +321,10 @@ fun ChatScreen(viewModel: ChatViewModel, clientEngine: HttpClientEngine) {
 }
 
 @Composable
-fun App(viewModel: ChatViewModel, clientEngine: HttpClientEngine) {
+fun App(
+    viewModel: ChatViewModel,
+    clientEngine: HttpClientEngine,
+) {
     MaterialTheme {
         ChatScreen(viewModel, clientEngine)
     }
@@ -333,12 +338,13 @@ fun TextWithButton(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         text()
-        Box(
+        Surface(
             modifier =
                 Modifier.width(24.dp).clickable(onClick = onClick)
                     .align(Alignment.CenterVertically),
         ) {
-            Text(buttonText, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center))
+
+            Text(buttonText, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         }
     }
 }

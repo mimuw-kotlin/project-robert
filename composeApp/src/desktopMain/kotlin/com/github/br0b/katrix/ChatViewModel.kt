@@ -61,7 +61,7 @@ class ChatViewModel(
                     onSuccess = {
                         pushMainMessages(
                             LogMessage.InfoMessage(
-                                "Logged in as ${loginData.identifier.user}",
+                                "Logged in",
                                 Instant.now(),
                             ),
                         )

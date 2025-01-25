@@ -12,6 +12,7 @@ kotlin {
 
     sourceSets {
         val desktopMain by getting
+        val desktopTest by getting
 
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -32,13 +33,19 @@ kotlin {
         }
 
         commonTest.dependencies {
-            implementation(libs.ui.test.junit4)
-            implementation(libs.ui.test.manifest)
+            implementation(kotlin("test"))
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
 
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
+        }
+
+        // Adds the desktop test dependency
+        desktopTest.dependencies {
+            implementation(compose.desktop.currentOs)
         }
     }
 }

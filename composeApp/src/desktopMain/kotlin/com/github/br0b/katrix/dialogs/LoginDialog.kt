@@ -7,6 +7,7 @@ import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import com.github.br0b.katrix.Client
 import com.github.br0b.katrix.FormField
 import com.github.br0b.katrix.HiddenFormField
@@ -27,9 +28,9 @@ fun LoginDialog(
         title = { Text("Login") },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                FormField(baseUrl, "Homeserver", { baseUrl = it })
-                FormField(username, "Username", { username = it })
-                HiddenFormField(password, "Password") { password = it }
+                FormField(baseUrl, "Homeserver", { baseUrl = it }, modifier = Modifier.testTag("HOMESERVER_INPUT"))
+                FormField(username, "Username", { username = it }, modifier = Modifier.testTag("USERNAME_INPUT"))
+                HiddenFormField(password, "Password", modifier = Modifier.testTag("PASSWORD_INPUT")) { password = it }
             }
         },
         confirmButton = {
@@ -38,6 +39,7 @@ fun LoginDialog(
                     onLogin(Client.LoginData(Url(baseUrl), IdentifierType.User(username), password))
                 },
                 enabled = baseUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
+                modifier = Modifier.testTag("LOGIN_DIALOG_BUTTON"),
             ) {
                 Text("Login")
             }

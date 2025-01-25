@@ -19,14 +19,14 @@ sealed class LogMessage(
 
     class InfoMessage(
         text: String,
-        time: Instant
+        time: Instant,
     ) : LogMessage(text, time) {
         override fun getColor(): Color = Color.Blue
     }
 
     class ErrorMessage(
         text: String,
-        time: Instant
+        time: Instant,
     ) : LogMessage(text, time) {
         override fun getColor(): Color = Color.Red
     }
@@ -44,5 +44,5 @@ class RoomMessage(
 
 data class OutgoingMessage(
     val body: String,
-    val roomId: RoomId
+    val roomId: RoomId,
 )

@@ -37,7 +37,7 @@ fun LoginDialog(
                 onClick = {
                     onLogin(Client.LoginData(Url(baseUrl), IdentifierType.User(username), password))
                 },
-                enabled = baseUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty()
+                enabled = baseUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
             ) {
                 Text("Login")
             }
@@ -46,6 +46,6 @@ fun LoginDialog(
             Button(onClick = onDismissRequest) {
                 Text("Cancel")
             }
-        }
+        },
     )
 }

@@ -28,19 +28,11 @@ fun FrameWindowScope.KatrixMenuBar(
 
     if (openLoginDialog) {
         LoginDialog(
-            onLogin = { onLogin(it); openLoginDialog = false },
-            onDismissRequest = { openLoginDialog = false }
+            onLogin = {
+                onLogin(it)
+                openLoginDialog = false
+            },
+            onDismissRequest = { openLoginDialog = false },
         )
     }
-}
-
-fun debugLogin(viewModel: ChatViewModel, httpClientEngine: HttpClientEngine) {
-    viewModel.login(
-        Client.LoginData(
-            Url("http://localhost:8008"),
-            IdentifierType.User("aha"),
-            "@3%(BzJtj|LxA\\U-<N*N"
-        ),
-        httpClientEngine
-    )
 }

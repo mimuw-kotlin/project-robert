@@ -15,31 +15,49 @@ class ChatViewModel(
     private val roomStateMap = mutableMapOf<RoomId, Flow<Client.RoomState>>()
 
     private var client: Client? = null
-    private var roomsStateJob: Job? = null
-    private var activeRoomStateJob: Job? = null
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState
 
+    // TODO
+    val username: StateFlow<String?> = MutableStateFlow(null)
+
     private val _activeRoomState = MutableStateFlow<Client.RoomState?>(null)
     val activeRoomState: StateFlow<Client.RoomState?> = _activeRoomState
+    private var activeRoomStateJob: Job? = null
 
     private val _roomsState = MutableStateFlow(emptyList<Room>())
     val roomsState: StateFlow<List<Room>> = _roomsState
+    private var roomsStateJob: Job? = null
 
-    fun login(loginData: Client.LoginData, httpClientEngine: HttpClientEngine) {
+    fun login(
+        loginData: Client.LoginData,
+        httpClientEngine: HttpClientEngine,
+    ) {
         scope.launch {
             if (client != null) {
                 pushMainMessages(LogMessage.ErrorMessage("Already logged in", Instant.now()))
             } else {
                 pushMainMessages(LogMessage.InfoMessage("Logging in...", Instant.now()))
-                Client.login(loginData, httpClientEngine).fold(onSuccess = { onLoginSuccess(it) }, onFailure = {
-                    pushMainMessages(
-                        LogMessage.ErrorMessage(
-                            it.message ?: "Unknown error", Instant.now()
+                Client.login(loginData, httpClientEngine).fold(
+                    onSuccess = {
+                        pushMainMessages(
+                            LogMessage.InfoMessage(
+                                "Logged in as ${loginData.identifier.user}",
+                                Instant.now(),
+                            ),
                         )
-                    )
-                })
+                        onLoginSuccess(it)
+                    },
+                    onFailure = {
+                        pushMainMessages(
+                            LogMessage.ErrorMessage(
+                                it.message ?: "Unknown error",
+                                Instant.now(),
+                            ),
+                        )
+                    },
+                )
             }
         }
     }
@@ -69,9 +87,10 @@ class ChatViewModel(
         scope.launch {
             val newRoomId = if (_uiState.value.activeRoomId == roomId) null else roomId
 
-            val activeRoomFlow = newRoomId?.let { roomId ->
-                client?.getRoomFlow(roomId, config.nMessageBatchSize)
-            }
+            val activeRoomFlow =
+                newRoomId?.let { roomId ->
+                    client?.getRoomFlow(roomId, config.nMessageBatchSize)
+                }
 
             _uiState.update { currentUiState ->
                 currentUiState.copy(activeRoomId = newRoomId)
@@ -80,18 +99,19 @@ class ChatViewModel(
             activeRoomStateJob?.cancel()
             activeRoomStateJob?.join()
             println("Previous active room state job cancelled")
-            activeRoomStateJob = scope.launch {
-                activeRoomFlow?.let { flow ->
-                    _activeRoomState.update { Client.RoomState() }
-                    println("[activeRoomState]: Collecting new room state from $activeRoomFlow")
-                    flow.collect { newActiveRoomState ->
-                        _activeRoomState.update {
-                            println("[activeRoomState]: Collected new room state: $newActiveRoomState")
-                            newActiveRoomState
+            activeRoomStateJob =
+                scope.launch {
+                    activeRoomFlow?.let { flow ->
+                        _activeRoomState.update { Client.RoomState() }
+                        println("[activeRoomState]: Collecting new room state from $activeRoomFlow")
+                        flow.collect { newActiveRoomState ->
+                            _activeRoomState.update {
+                                println("[activeRoomState]: Collected new room state: $newActiveRoomState")
+                                newActiveRoomState
+                            }
                         }
-                    }
-                } ?: _activeRoomState.update { null }
-            }
+                    } ?: _activeRoomState.update { null }
+                }
         }
     }
 
@@ -100,8 +120,8 @@ class ChatViewModel(
             client?.addRoom(name) ?: pushMainMessages(
                 LogMessage.ErrorMessage(
                     "Log in to add rooms!",
-                    Instant.now()
-                )
+                    Instant.now(),
+                ),
             )
         }
     }
@@ -137,11 +157,12 @@ class ChatViewModel(
     private fun onLoginSuccess(client: Client) {
         pushMainMessages(LogMessage.InfoMessage("Logged in", Instant.now()))
         this.client = client
-        roomsStateJob = scope.launch {
-            client.getRooms().collect { newRooms ->
-                _roomsState.update { newRooms }
+        roomsStateJob =
+            scope.launch {
+                client.getRooms().collect { newRooms ->
+                    _roomsState.update { newRooms }
+                }
             }
-        }
     }
 
     private fun pushMainMessages(message: LogMessage) {

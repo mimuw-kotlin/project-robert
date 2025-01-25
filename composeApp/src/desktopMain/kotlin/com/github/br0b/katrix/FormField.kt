@@ -14,7 +14,7 @@ fun FormField(
     label: String,
     onValueChange: (String) -> Unit,
     visualTransformation: VisualTransformation = VisualTransformation.None,
-    isError: Boolean = value.isEmpty()
+    isError: Boolean = value.isEmpty(),
 ) {
     TextField(
         value = value,
@@ -23,7 +23,7 @@ fun FormField(
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
         visualTransformation = visualTransformation,
-        isError = isError
+        isError = isError,
     )
 }
 
@@ -37,6 +37,6 @@ fun HiddenFormField(
         value = value,
         label = label,
         onValueChange = onValueChange,
-        visualTransformation = PasswordVisualTransformation()
+        visualTransformation = PasswordVisualTransformation(),
     )
 }

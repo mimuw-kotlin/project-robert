@@ -1,26 +1,27 @@
 package com.github.br0b.katrix
 
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.*
 import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.github.br0b.katrix.dialogs.AddRoomDialog
 import com.github.br0b.katrix.dialogs.ConfirmDialog
+import com.github.br0b.katrix.dialogs.LoginDialog
+import io.ktor.client.engine.*
 import kotlinx.coroutines.flow.StateFlow
 import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.core.model.RoomId
@@ -34,16 +35,11 @@ fun <T> ScrollableList(
 ) {
     val scrollState = rememberLazyListState()
 
-    LaunchedEffect(items) {
-        if (isOrderReversed && items.isNotEmpty())
-            scrollState.scrollToItem(items.size - 1)
-    }
-
     Box(modifier = modifier) {
         Column {
             LazyColumn(
                 state = scrollState,
-                reverseLayout = isOrderReversed
+                reverseLayout = isOrderReversed,
             ) {
                 items(items) {
                     item(it)
@@ -52,37 +48,45 @@ fun <T> ScrollableList(
         }
         VerticalScrollbar(
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            adapter = rememberScrollbarAdapter(scrollState)
+            adapter = rememberScrollbarAdapter(scrollState),
+            reverseLayout = isOrderReversed,
         )
     }
 }
 
 @Composable
-fun MessageInput(activeRoomId: RoomId?, onSend: (OutgoingMessage) -> Unit) {
+fun MessageInput(
+    activeRoomId: RoomId?,
+    onSend: (OutgoingMessage) -> Unit,
+) {
     var messageInput by remember { mutableStateOf("") }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         TextField(
             modifier = Modifier.weight(1f),
             value = messageInput,
-            onValueChange = { messageInput = it }
+            onValueChange = { messageInput = it },
         )
         Spacer(modifier = Modifier.width(8.dp))
         activeRoomId?.let {
             Button(
-                onClick = { onSend(OutgoingMessage(messageInput, activeRoomId)); messageInput = "" },
-                enabled = messageInput.isNotEmpty()
+                onClick = {
+                    onSend(OutgoingMessage(messageInput, activeRoomId))
+                    messageInput = ""
+                },
+                enabled = messageInput.isNotEmpty(),
             ) {
                 Text("Send")
             }
         } ?: Button(
             onClick = { /* Do nothing, because there is no active room. */ },
-            enabled = false
+            enabled = false,
         ) {
             Text("Send")
         }
@@ -96,7 +100,7 @@ fun Rooms(
     onRoomClick: (RoomId) -> Unit,
     onAddRoom: (String) -> Unit,
     onLeaveRoom: (RoomId) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val rooms by roomsState.collectAsState()
     var isAdditionDialogOpen by remember { mutableStateOf(false) }
@@ -106,7 +110,7 @@ fun Rooms(
         TextWithButton({ Text("Rooms") }, "+", onClick = { isAdditionDialogOpen = true })
         ScrollableList(
             rooms,
-            modifier = modifier
+            modifier = modifier,
         ) { room ->
             val id = room.roomId
             val roomName = room.name?.explicitName ?: id.toString()
@@ -116,32 +120,41 @@ fun Rooms(
                     Text(
                         roomName,
                         modifier = Modifier.clickable(onClick = { onRoomClick(id) }),
-                        fontWeight = if (id == activeRoom) FontWeight.Bold else FontWeight.Normal
+                        fontWeight = if (id == activeRoom) FontWeight.Bold else FontWeight.Normal,
                     )
                 },
                 "-",
-                onClick = { roomToLeave = id }
+                onClick = { roomToLeave = id },
             )
         }
     }
 
     if (isAdditionDialogOpen) {
         AddRoomDialog(
-            onAddRoom = { onAddRoom(it); isAdditionDialogOpen = false },
-            onDismissRequest = { isAdditionDialogOpen = false }
+            onAddRoom = {
+                onAddRoom(it)
+                isAdditionDialogOpen = false
+            },
+            onDismissRequest = { isAdditionDialogOpen = false },
         )
     }
 
     roomToLeave?.let {
         ConfirmDialog(
-            onConfirm = { onLeaveRoom(it); roomToLeave = null },
-            onDismissRequest = { roomToLeave = null }
+            onConfirm = {
+                onLeaveRoom(it)
+                roomToLeave = null
+            },
+            onDismissRequest = { roomToLeave = null },
         )
     }
 }
 
 @Composable
-fun MessageView(body: String, color: Color) {
+fun MessageView(
+    body: String,
+    color: Color,
+) {
     Text(
         text = body,
         color = color,
@@ -149,20 +162,23 @@ fun MessageView(body: String, color: Color) {
 }
 
 @Composable
-fun ScrollableListWithHeader(
+fun WithHeader(
     header: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    scrollableList: @Composable () -> Unit,
+    block: @Composable () -> Unit,
 ) {
     Column(modifier = modifier) {
         header()
-        scrollableList()
+        block()
     }
 }
 
 @Composable
-fun MainMessages(messages: List<LogMessage>, modifier: Modifier = Modifier) {
-    ScrollableListWithHeader(
+fun MainMessages(
+    messages: List<LogMessage>,
+    modifier: Modifier = Modifier,
+) {
+    WithHeader(
         header = { Text("Main", textDecoration = TextDecoration.Underline) },
         modifier,
     ) {
@@ -177,7 +193,7 @@ fun RoomMessages(
     roomState: Client.RoomState,
     onLoadOldMessages: () -> Unit,
     onLoadNewMessages: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     println("[RoomMessages] Room name: ${roomState.name}")
 
@@ -185,17 +201,20 @@ fun RoomMessages(
         onLoadNewMessages()
     }
 
-    ScrollableListWithHeader(
+    WithHeader(
         header = { Text(roomState.name ?: "Loading...") },
-        modifier = modifier
+        modifier = modifier,
     ) {
         Column {
             if (roomState.canLoadOldMessages) {
-                // TODO
+                Button(onClick = onLoadOldMessages) {
+                    Text("Load more timeline events")
+                }
             }
             ScrollableList(
                 items = roomState.messages.reversed(),
                 isOrderReversed = true,
+                modifier = Modifier.fillMaxWidth(),
             ) { message ->
                 val senderId = message.senderId
                 val sender = roomState.users[senderId]?.name ?: senderId.toString()
@@ -207,7 +226,10 @@ fun RoomMessages(
 }
 
 @Composable
-fun Users(roomState: Client.RoomState?, modifier: Modifier = Modifier) {
+fun Users(
+    roomState: Client.RoomState?,
+    modifier: Modifier = Modifier,
+) {
     val users = roomState?.users ?: emptyMap()
 
     Column(modifier) {
@@ -217,20 +239,51 @@ fun Users(roomState: Client.RoomState?, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel) {
+fun UserStatus(
+    usernameFlow: StateFlow<String?>,
+    onLogin: (Client.LoginData) -> Unit,
+    onLogout: () -> Unit,
+) {
+    var showLoginDialog by remember { mutableStateOf(false) }
+
+    usernameFlow.collectAsState().value?.let { username ->
+        Surface {
+            Text(username)
+            Button(onClick = onLogout) {
+                Text("Logout")
+            }
+        }
+    } ?: Button(onClick = { /* Do nothing, because there is no active room. */ }) {
+        Text("Login")
+    }
+
+    if (showLoginDialog) {
+        LoginDialog(
+            onLogin = {
+                onLogin(it)
+                showLoginDialog = false
+            },
+            onDismissRequest = { showLoginDialog = false },
+        )
+    }
+}
+
+@Composable
+fun ChatScreen(viewModel: ChatViewModel, clientEngine: HttpClientEngine) {
     val uiState by viewModel.uiState.collectAsState()
     val activeRoomState by viewModel.activeRoomState.collectAsState()
     val activeRoomId = uiState.activeRoomId
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp)
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(8.dp),
     ) {
         Column {
             Row(
                 modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Rooms(
                     viewModel.roomsState,
@@ -238,31 +291,37 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     onRoomClick = { viewModel.setActiveRoom(it) },
                     onAddRoom = { name -> viewModel.addRoom(name) },
                     onLeaveRoom = { viewModel.leaveRoom(it) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
-
 
                 Box(modifier = Modifier.weight(3f)) {
                     activeRoomState?.let { activeRoomData ->
                         RoomMessages(
                             roomState = activeRoomData,
                             onLoadOldMessages = { viewModel.fetchOldMessages() },
-                            onLoadNewMessages = { viewModel.fetchNewMessages() }
+                            onLoadNewMessages = { viewModel.fetchNewMessages() },
                         )
                     } ?: MainMessages(uiState.mainMessages)
                 }
 
                 Users(activeRoomState, Modifier.weight(1f))
             }
-            MessageInput(activeRoomId) { viewModel.send(it) }
+            Row {
+                UserStatus(
+                    usernameFlow = viewModel.username,
+                    onLogin = { viewModel.login(it, clientEngine) },
+                    onLogout = { viewModel.logout() },
+                )
+                MessageInput(activeRoomId) { viewModel.send(it) }
+            }
         }
     }
 }
 
 @Composable
-fun App(viewModel: ChatViewModel) {
+fun App(viewModel: ChatViewModel, clientEngine: HttpClientEngine) {
     MaterialTheme {
-        ChatScreen(viewModel)
+        ChatScreen(viewModel, clientEngine)
     }
 }
 
@@ -275,8 +334,9 @@ fun TextWithButton(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         text()
         Box(
-            modifier = Modifier.width(24.dp).clickable(onClick = onClick)
-                .align(Alignment.CenterVertically)
+            modifier =
+                Modifier.width(24.dp).clickable(onClick = onClick)
+                    .align(Alignment.CenterVertically),
         ) {
             Text(buttonText, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center))
         }

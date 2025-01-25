@@ -4,14 +4,15 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.ktlint)
 }
 
 kotlin {
     jvm("desktop")
-    
+
     sourceSets {
         val desktopMain by getting
-        
+
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
@@ -21,21 +22,26 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodel)
             implementation(libs.androidx.lifecycle.runtime.compose)
-            implementation("net.folivo:trixnity-client:4.11.0")
-            implementation("net.folivo:trixnity-client-repository-realm:4.11.0")
-            implementation("net.folivo:trixnity-client-media-okio:4.11.0")
-            implementation("org.slf4j:slf4j-api:2.0.9") // Core SLF4J API
-            implementation("org.slf4j:slf4j-simple:2.0.9") // Simple implementation
-            implementation("io.ktor:ktor-client-core:3.0.2")
-            implementation("io.ktor:ktor-client-okhttp:3.0.2")
+            implementation(libs.trixnity.client)
+            implementation(libs.trixnity.client.repository.realm)
+            implementation(libs.trixnity.client.media.okio)
+            implementation(libs.slf4j.api)
+            implementation(libs.slf4j.simple)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.okhttp)
         }
+
+        commonTest.dependencies {
+            implementation(libs.ui.test.junit4)
+            implementation(libs.ui.test.manifest)
+        }
+
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
         }
     }
 }
-
 
 compose.desktop {
     application {

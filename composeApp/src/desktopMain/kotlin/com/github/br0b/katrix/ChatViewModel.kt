@@ -14,13 +14,15 @@ class ChatViewModel(
     private val _scope = CoroutineScope(Dispatchers.IO)
     private val _config = Config().apply(config)
 
-    // Used for communication with jobs.
     private val _client = MutableStateFlow<Client?>(null)
     private val _activeRoomFlow = MutableStateFlow<Flow<Client.RoomState>?>(null)
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState
 
+    /**
+     * Username of the logged-in user.
+     */
     private val _username = MutableStateFlow<String?>(null)
     val username: StateFlow<String?> = _username
 
@@ -40,7 +42,7 @@ class ChatViewModel(
             }
         }
 
-        // Update rooms state.
+        // Update the list of rooms.
         _scope.launch {
             _client.flatMapLatest { it?.getRooms() ?: flowOf(emptyList()) }.collect { rooms ->
                 _roomsState.update { rooms }
@@ -111,9 +113,12 @@ class ChatViewModel(
         }
     }
 
-    fun addRoom(name: String) {
+    /**
+     * Create a new room on the server.
+     */
+    fun createRoom(name: String) {
         _scope.launch {
-            _client.value?.addRoom(name) ?: pushMainMessages(
+            _client.value?.createRoom(name) ?: pushMainMessages(
                 LogMessage.ErrorMessage(
                     "Log in to add rooms!",
                     Instant.now(),
@@ -122,6 +127,9 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Leave a room on the server.
+     */
     fun leaveRoom(roomId: RoomId) {
         _scope.launch {
             _client.value?.leaveRoom(roomId)
@@ -132,6 +140,9 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Send a message to the matrix server.
+     */
     fun send(message: OutgoingMessage) {
         _scope.launch {
             _client.value?.send(message)

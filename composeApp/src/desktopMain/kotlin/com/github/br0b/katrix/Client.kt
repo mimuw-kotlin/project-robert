@@ -20,56 +20,33 @@ import java.time.Instant
 /**
  * A client that interacts with the Matrix server.
  */
-class Client(
+class Client private constructor(
     private val matrixClient: MatrixClient,
 ) : AutoCloseable {
-    companion object {
-        suspend fun login(
-            loginData: LoginData,
-            httpClientEngine: HttpClientEngine,
-        ): Result<Client> {
-            val cache = Cache.create()
+    data class LoginData(
+        val baseUrl: Url,
+        val identifier: IdentifierType.User,
+        val password: String,
+    )
 
-            return MatrixClient.login(
-                baseUrl = loginData.baseUrl,
-                identifier = loginData.identifier,
-                password = loginData.password,
-                repositoriesModule = cache.getRepositoryModule(),
-                mediaStore = cache.getMediaStore(),
-                configuration = {
-                    this.httpClientEngine = httpClientEngine
-                },
-            ).fold(onSuccess = { matrixClient ->
-                matrixClient.startSync()
-                Result.success(Client(matrixClient))
-            }, onFailure = {
-                Result.failure(it)
-            })
-        }
+    data class RoomState(
+        val id: RoomId,
+        val name: String? = null,
+        val users: Map<UserId, RoomUser?> = emptyMap(),
+        val messages: List<RoomMessage> = emptyList(),
+        val canLoadOldMessages: Boolean = false,
+        val canLoadNewMessages: Boolean = false,
+    )
 
-        private fun eventTransformer(eventFlow: Flow<TimelineEvent>): Flow<RoomMessage?> {
-            return eventFlow.map { event ->
-                event.content?.getOrNull()?.let { content ->
-                    if (content is RoomMessageEventContent) {
-                        RoomMessage(
-                            body = content.body,
-                            time = Instant.ofEpochMilli(event.originTimestamp),
-                            senderId = event.sender,
-                        )
-                    } else {
-                        null
-                    }
-                }
-            }
-        }
-    }
-
+    /**
+     * When we get a timeline of a room from the server, we store it here.
+     */
     private val timelineMap = mutableMapOf<RoomId, Timeline<Flow<RoomMessage?>>>()
-    private val mutex = Mutex()
+    private val timelineMutex = Mutex()
 
     fun getRooms() = matrixClient.room.getAll().flattenValues().map(Set<Room>::toList)
 
-    suspend fun addRoom(name: String) =
+    suspend fun createRoom(name: String) =
         matrixClient.api.room.createRoom(
             name = name,
             visibility = DirectoryVisibility.PUBLIC,
@@ -77,11 +54,16 @@ class Client(
 
     suspend fun leaveRoom(roomId: RoomId) = matrixClient.api.room.leaveRoom(roomId)
 
+    /**
+     * Get the statae of a room.
+     *
+     * @param nInitEvents The number of initial events we want to fetch.
+     */
     suspend fun getRoomFlow(
         roomId: RoomId,
-        nInitMessages: Long,
+        nInitEvents: Long,
     ): Flow<RoomState> {
-        mutex.withLock {
+        timelineMutex.withLock {
             val timeline =
                 timelineMap.getOrPut(roomId) {
                     getTimeline(roomId).apply {
@@ -89,7 +71,7 @@ class Client(
 
                         init(
                             startFrom = startFrom,
-                            configBefore = { this.maxSize = nInitMessages },
+                            configBefore = { this.maxSize = nInitEvents },
                         )
                     }
                 }
@@ -117,14 +99,14 @@ class Client(
         roomId: RoomId,
         maxNMessages: Long,
     ) {
-        mutex.withLock {
+        timelineMutex.withLock {
             val change = timelineMap[roomId]?.loadBefore { this.maxSize = maxNMessages }
             println("Number of new elements: ${change?.newElements?.size ?: 0}")
         }
     }
 
     suspend fun loadNewMessages(roomId: RoomId) {
-        mutex.withLock {
+        timelineMutex.withLock {
             timelineMap[roomId]?.loadAfter()
         }
     }
@@ -151,18 +133,47 @@ class Client(
         matrixClient.close()
     }
 
-    data class LoginData(
-        val baseUrl: Url,
-        val identifier: IdentifierType.User,
-        val password: String,
-    )
+    companion object {
+        suspend fun login(
+            loginData: LoginData,
+            httpClientEngine: HttpClientEngine,
+        ): Result<Client> {
+            val cache = Cache.create()
 
-    data class RoomState(
-        val id: RoomId,
-        val name: String? = null,
-        val users: Map<UserId, RoomUser?> = emptyMap(),
-        val messages: List<RoomMessage> = emptyList(),
-        val canLoadOldMessages: Boolean = false,
-        val canLoadNewMessages: Boolean = false,
-    )
+            return MatrixClient.login(
+                baseUrl = loginData.baseUrl,
+                identifier = loginData.identifier,
+                password = loginData.password,
+                repositoriesModule = cache.getRepositoryModule(),
+                mediaStore = cache.getMediaStore(),
+                configuration = {
+                    this.httpClientEngine = httpClientEngine
+                },
+            ).fold(onSuccess = { matrixClient ->
+                matrixClient.startSync()
+                Result.success(Client(matrixClient))
+            }, onFailure = {
+                Result.failure(it)
+            })
+        }
+
+        /**
+         * An event transformer for creating a Timeline of RoomMessages.
+         */
+        private fun eventTransformer(eventFlow: Flow<TimelineEvent>): Flow<RoomMessage?> {
+            return eventFlow.map { event ->
+                event.content?.getOrNull()?.let { content ->
+                    if (content is RoomMessageEventContent) {
+                        RoomMessage(
+                            body = content.body,
+                            time = Instant.ofEpochMilli(event.originTimestamp),
+                            senderId = event.sender,
+                        )
+                    } else {
+                        null
+                    }
+                }
+            }
+        }
+    }
 }

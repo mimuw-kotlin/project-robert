@@ -26,6 +26,9 @@ fun main() =
         }
     }
 
+/**
+ * Logs in with a hardcoded user and password.
+ */
 fun debugLogin(
     viewModel: ChatViewModel,
     httpClientEngine: HttpClientEngine,

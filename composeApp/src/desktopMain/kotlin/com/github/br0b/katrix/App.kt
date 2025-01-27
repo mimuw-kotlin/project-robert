@@ -30,72 +30,73 @@ import net.folivo.trixnity.core.model.RoomId
 import net.folivo.trixnity.core.model.events.m.room.Membership
 
 @Composable
-fun <T> ScrollableList(
-    items: List<T>,
-    modifier: Modifier = Modifier,
-    isOrderReversed: Boolean = false,
-    item: @Composable (T) -> Unit,
+fun App(
+    viewModel: ChatViewModel,
+    clientEngine: HttpClientEngine,
 ) {
-    val scrollState = rememberLazyListState()
-
-    Box(modifier = modifier) {
-        Column {
-            LazyColumn(
-                state = scrollState,
-                reverseLayout = isOrderReversed,
-            ) {
-                items(items) {
-                    item(it)
-                }
-            }
-        }
-        VerticalScrollbar(
-            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            adapter = rememberScrollbarAdapter(scrollState),
-            reverseLayout = isOrderReversed,
-        )
+    MaterialTheme {
+        ChatScreen(viewModel, clientEngine)
     }
 }
 
+/**
+ * The main screen of the chat application.
+ */
 @Composable
-fun MessageInput(
-    activeRoomId: RoomId?,
-    onSend: (OutgoingMessage) -> Unit,
+fun ChatScreen(
+    viewModel: ChatViewModel,
+    clientEngine: HttpClientEngine,
 ) {
-    var messageInput by remember { mutableStateOf("") }
+    val uiState by viewModel.uiState.collectAsState()
+    val activeRoomState by viewModel.activeRoomState.collectAsState()
+    val activeRoomId = uiState.activeRoomId
 
-    Row(
+    Box(
         modifier =
             Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        TextField(
-            modifier = Modifier.weight(1f),
-            value = messageInput,
-            onValueChange = { messageInput = it },
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        activeRoomId?.let {
-            Button(
-                onClick = {
-                    onSend(OutgoingMessage(messageInput, activeRoomId))
-                    messageInput = ""
-                },
-                enabled = messageInput.isNotEmpty(),
+        Column {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Send")
+                Rooms(
+                    viewModel.roomsState,
+                    activeRoomId,
+                    onRoomClick = { viewModel.setActiveRoom(it) },
+                    onAddRoom = { name -> viewModel.createRoom(name) },
+                    onLeaveRoom = { viewModel.leaveRoom(it) },
+                )
+
+                Box(modifier = Modifier.weight(3f)) {
+                    activeRoomState?.let { activeRoomData ->
+                        RoomMessages(
+                            roomState = activeRoomData,
+                            onLoadOldMessages = { viewModel.fetchOldMessages() },
+                            onLoadNewMessages = { viewModel.fetchNewMessages() },
+                        )
+                    } ?: MainMessages(uiState.mainMessages)
+                }
+
+                Users(activeRoomState, Modifier.weight(1f))
             }
-        } ?: Button(
-            onClick = { /* Do nothing, because there is no active room. */ },
-            enabled = false,
-        ) {
-            Text("Send")
+            Row {
+                UserStatus(
+                    usernameFlow = viewModel.username,
+                    onLogin = { viewModel.login(it, clientEngine) },
+                    onLogout = { viewModel.logout() },
+                )
+                MessageInput(activeRoomId) { viewModel.send(it) }
+            }
         }
     }
 }
 
+/**
+ * A list of rooms the current user is a member of.
+ */
 @Composable
 fun Rooms(
     roomsState: StateFlow<List<Room>>,
@@ -152,44 +153,6 @@ fun Rooms(
 }
 
 @Composable
-fun MessageView(
-    body: String,
-    color: Color,
-) {
-    Text(
-        text = body,
-        color = color,
-    )
-}
-
-@Composable
-fun WithHeader(
-    header: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    block: @Composable () -> Unit,
-) {
-    Column(modifier = modifier) {
-        header()
-        block()
-    }
-}
-
-@Composable
-fun MainMessages(
-    messages: List<LogMessage>,
-    modifier: Modifier = Modifier,
-) {
-    WithHeader(
-        header = { Text("Main", textDecoration = TextDecoration.Underline) },
-        modifier,
-    ) {
-        ScrollableList(messages) {
-            MessageView(it.getFormatted(), it.getColor())
-        }
-    }
-}
-
-@Composable
 fun RoomMessages(
     roomState: Client.RoomState,
     onLoadOldMessages: () -> Unit,
@@ -224,6 +187,27 @@ fun RoomMessages(
     }
 }
 
+/**
+ * A list of log messages.
+ */
+@Composable
+fun MainMessages(
+    messages: List<LogMessage>,
+    modifier: Modifier = Modifier,
+) {
+    WithHeader(
+        header = { Text("Main", textDecoration = TextDecoration.Underline) },
+        modifier,
+    ) {
+        ScrollableList(messages) {
+            MessageView(it.getFormatted(), it.getColor())
+        }
+    }
+}
+
+/**
+ * A list of users in the active room.
+ */
 @Composable
 fun Users(
     roomState: Client.RoomState?,
@@ -269,68 +253,102 @@ fun UserStatus(
     }
 }
 
+/**
+ * A text field for sending a message to a Matrix room.
+ */
 @Composable
-fun ChatScreen(
-    viewModel: ChatViewModel,
-    clientEngine: HttpClientEngine,
+fun MessageInput(
+    activeRoomId: RoomId?,
+    onSend: (OutgoingMessage) -> Unit,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val activeRoomState by viewModel.activeRoomState.collectAsState()
-    val activeRoomId = uiState.activeRoomId
+    var messageInput by remember { mutableStateOf("") }
 
-    Box(
+    Row(
         modifier =
             Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+        TextField(
+            modifier = Modifier.weight(1f),
+            value = messageInput,
+            onValueChange = { messageInput = it },
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        activeRoomId?.let {
+            Button(
+                onClick = {
+                    onSend(OutgoingMessage(messageInput, activeRoomId))
+                    messageInput = ""
+                },
+                enabled = messageInput.isNotEmpty(),
             ) {
-                Rooms(
-                    viewModel.roomsState,
-                    activeRoomId,
-                    onRoomClick = { viewModel.setActiveRoom(it) },
-                    onAddRoom = { name -> viewModel.addRoom(name) },
-                    onLeaveRoom = { viewModel.leaveRoom(it) },
-                )
-
-                Box(modifier = Modifier.weight(3f)) {
-                    activeRoomState?.let { activeRoomData ->
-                        RoomMessages(
-                            roomState = activeRoomData,
-                            onLoadOldMessages = { viewModel.fetchOldMessages() },
-                            onLoadNewMessages = { viewModel.fetchNewMessages() },
-                        )
-                    } ?: MainMessages(uiState.mainMessages)
-                }
-
-                Users(activeRoomState, Modifier.weight(1f))
+                Text("Send")
             }
-            Row {
-                UserStatus(
-                    usernameFlow = viewModel.username,
-                    onLogin = { viewModel.login(it, clientEngine) },
-                    onLogout = { viewModel.logout() },
-                )
-                MessageInput(activeRoomId) { viewModel.send(it) }
-            }
+        } ?: Button(
+            onClick = { /* Do nothing, because there is no active room. */ },
+            enabled = false,
+        ) {
+            Text("Send")
         }
     }
 }
 
 @Composable
-fun App(
-    viewModel: ChatViewModel,
-    clientEngine: HttpClientEngine,
+fun MessageView(
+    body: String,
+    color: Color,
 ) {
-    MaterialTheme {
-        ChatScreen(viewModel, clientEngine)
+    Text(
+        text = body,
+        color = color,
+    )
+}
+
+@Composable
+fun <T> ScrollableList(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    isOrderReversed: Boolean = false,
+    item: @Composable (T) -> Unit,
+) {
+    val scrollState = rememberLazyListState()
+
+    Box(modifier = modifier) {
+        Column {
+            LazyColumn(
+                state = scrollState,
+                reverseLayout = isOrderReversed,
+            ) {
+                items(items) {
+                    item(it)
+                }
+            }
+        }
+        VerticalScrollbar(
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            adapter = rememberScrollbarAdapter(scrollState),
+            reverseLayout = isOrderReversed,
+        )
     }
 }
 
+@Composable
+fun WithHeader(
+    header: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    block: @Composable () -> Unit,
+) {
+    Column(modifier = modifier) {
+        header()
+        block()
+    }
+}
+
+/**
+ * A text with a button next to it.
+ */
 @Composable
 fun TextWithButton(
     text: @Composable () -> Unit,

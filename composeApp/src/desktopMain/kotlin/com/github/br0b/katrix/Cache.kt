@@ -8,7 +8,7 @@ import okio.Path.Companion.toPath
 import org.koin.core.module.Module
 
 /**
- * A cache for storing data.
+ * A cache for storing client data.
  */
 class Cache private constructor(
     private val repositoryModule: Module,

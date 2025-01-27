@@ -25,4 +25,4 @@ In the second part we're going to add message sending, user status and improve t
 
 ## Libraries
 - Compose Multiplatform (https://github.com/JetBrains/compose-multiplatform)
-- Trixnity Messenger (https://gitlab.com/connect2x/trixnity-messenger/trixnity-messenger)
+- Trixnity (https://trixnity.gitlab.io/trixnity/)

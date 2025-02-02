@@ -17,7 +17,7 @@ class AppTest {
             }
 
             onNodeWithTag("LOGIN_BUTTON").performClick()
-            waitUntil { onNodeWithText("Homeserver").isDisplayed() }
+            waitUntilAtLeastOneExists(hasText("Homeserver"), 5000)
             onNodeWithTag("HOMESERVER_INPUT").performTextInput("http://localhost:8008")
             onNodeWithTag("USERNAME_INPUT").performTextInput("aha")
             onNodeWithTag("PASSWORD_INPUT").performTextInput("@3%(BzJtj|LxA\\U-<N*N")

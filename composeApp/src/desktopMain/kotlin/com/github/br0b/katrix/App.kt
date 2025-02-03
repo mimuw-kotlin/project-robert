@@ -51,9 +51,7 @@ fun ChatScreen(
     viewModel: ChatViewModel,
     clientEngine: HttpClientEngine,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val activeRoomState by viewModel.activeRoomState.collectAsState()
-    val activeRoomId = uiState.activeRoomId
+    val activeRoomId by viewModel.activeRoomId.collectAsState()
 
     Box(
         modifier =
@@ -75,17 +73,19 @@ fun ChatScreen(
                 )
 
                 Box(modifier = Modifier.weight(3f)) {
-                    activeRoomState?.let { activeRoomData ->
+                    if (activeRoomId != null) {
                         RoomMessages(
-                            roomState = activeRoomData,
+                            viewModel.activeRoomState,
                             onLoadOldMessages = { viewModel.loadOldMessages() },
                             onLoadNewMessages = { viewModel.loadNewMessages() },
                             onLoadThumbnail = { viewModel.loadThumbnail(it) }
                         )
-                    } ?: MainMessages(uiState.mainMessages)
+                    } else {
+                        MainMessages(viewModel.mainMessages)
+                    }
                 }
 
-                Users(activeRoomState, Modifier.weight(1f))
+                Users(viewModel.activeRoomState, Modifier.weight(1f))
             }
             Row {
                 UserStatus(
@@ -159,47 +159,48 @@ fun Rooms(
 
 @Composable
 fun RoomMessages(
-    roomState: Client.RoomState,
+    roomStateFlow: StateFlow<Client.RoomState?>,
     onLoadOldMessages: () -> Unit,
     onLoadNewMessages: () -> Unit,
     onLoadThumbnail: (ImageInfo) -> StateFlow<Result<ByteArray>?>,
     modifier: Modifier = Modifier,
 ) {
-    if (roomState.canLoadNewMessages) {
-        onLoadNewMessages()
-    }
+    roomStateFlow.collectAsState().value?.let { roomState ->
+        if (roomState.canLoadNewMessages) {
+            onLoadNewMessages()
+        }
 
-    WithHeader(
-        header = { Text(roomState.name ?: "Loading...") },
-        modifier = modifier,
-    ) {
-        Column {
-            if (roomState.canLoadOldMessages) {
-                Button(onClick = onLoadOldMessages) {
-                    Text("Load more timeline events")
+        WithHeader(
+            header = { Text(roomState.name ?: "Loading...") },
+            modifier = modifier,
+        ) {
+            Column {
+                if (roomState.canLoadOldMessages) {
+                    Button(onClick = onLoadOldMessages) {
+                        Text("Load more timeline events")
+                    }
                 }
-            }
-            ScrollableList(
-                items = roomState.messages.reversed(),
-                isOrderReversed = true,
-                modifier = Modifier.fillMaxWidth(),
-            ) { message ->
-                val senderId = message.senderId
-                val sender = roomState.users[senderId]?.name ?: senderId.toString()
-
-                Column {
-                    Text("[${message.time}] $sender: ${message.body}", color = Color.Blue)
-                    message.thumbnailInfo?.let { imgInfo ->
-                        println("[App] Loading thumbnail for ${imgInfo.name}...")
-                        onLoadThumbnail(imgInfo).collectAsState().value?.fold(
-                            onSuccess = { byteArray ->
-                                println("Byte array size: ${byteArray.size}")
-                                val bitmap = Image.makeFromEncoded(byteArray).toComposeImageBitmap()
-                                Image(bitmap, imgInfo.name)
-                            },
-                            onFailure = { Text("Couldn't load ${imgInfo.name}") }
-                        ) ?: Text(imgInfo.name)
-                    } ?: println("No thumbnail info")
+                ScrollableList(
+                    items = roomState.messages.reversed(),
+                    isOrderReversed = true,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { message ->
+                    val senderId = message.senderId
+                    val sender = roomState.users[senderId]?.name ?: senderId.toString()
+                    Column {
+                        Text("[${message.time}] $sender: ${message.body}", color = Color.Blue)
+                        message.thumbnailInfo?.let { imgInfo ->
+                            println("[App] Loading thumbnail for ${imgInfo.name}...")
+                            onLoadThumbnail(imgInfo).collectAsState().value?.fold(
+                                onSuccess = { byteArray ->
+                                    println("Byte array size: ${byteArray.size}")
+                                    val bitmap = Image.makeFromEncoded(byteArray).toComposeImageBitmap()
+                                    Image(bitmap, imgInfo.name)
+                                },
+                                onFailure = { Text("Couldn't load ${imgInfo.name}") }
+                            ) ?: Text(imgInfo.name)
+                        } ?: println("No thumbnail info")
+                    }
                 }
             }
         }
@@ -211,14 +212,14 @@ fun RoomMessages(
  */
 @Composable
 fun MainMessages(
-    messages: List<LogMessage>,
+    messages: StateFlow<List<LogMessage>>,
     modifier: Modifier = Modifier,
 ) {
     WithHeader(
         header = { Text("Main", textDecoration = TextDecoration.Underline) },
         modifier,
     ) {
-        ScrollableList(messages) { msg ->
+        ScrollableList(messages.collectAsState().value) { msg ->
             when(msg) {
                 is LogMessage.InfoMessage -> {
                     Text("[${msg.timestamp}]: ${msg.body}", color = Color.Blue)
@@ -236,10 +237,10 @@ fun MainMessages(
  */
 @Composable
 fun Users(
-    roomState: Client.RoomState?,
+    roomState: StateFlow<Client.RoomState?>,
     modifier: Modifier = Modifier,
 ) {
-    val users = roomState?.users ?: emptyMap()
+    val users = roomState.collectAsState().value?.users ?: emptyMap()
 
     Column(modifier) {
         Text("Users")

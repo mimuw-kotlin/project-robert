@@ -67,21 +67,19 @@ class Client private constructor(
                             time = Instant.ofEpochMilli(event.originTimestamp),
                             senderId = event.sender,
                             thumbnailInfo = content.info?.let { info ->
-                                info.thumbnailInfo?.let { thumbnailInfo ->
-                                    info.thumbnailUrl?.let {thumbnailUrl ->
-                                        thumbnailInfo.width?.let { width ->
-                                            thumbnailInfo.height?.let { height ->
-                                                ImageInfo(
-                                                    name = content.fileName ?: content.body,
-                                                    url = thumbnailUrl,
-                                                    width = width,
-                                                    height = height
-                                                )
-                                            } ?: run { println("No height"); null }
-                                        } ?: run { println("No width"); null }
-                                    } ?: run { println("No thumbnail url"); null }
-                                } ?: run { println("No thumbnail info"); null }
-                            } ?: run { println("No info"); null }
+                                content.url?.let { url ->
+                                    info.width?.let { width ->
+                                        info.height?.let { height ->
+                                            ImageInfo(
+                                                name = content.fileName ?: content.body,
+                                                url = url,
+                                                width = width,
+                                                height = height
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         )
                         else -> null
                     }
@@ -98,11 +96,11 @@ class Client private constructor(
 
     data class RoomState(
         val id: RoomId,
-        val name: String? = null,
-        val users: Map<UserId, RoomUser?> = emptyMap(),
-        val messages: List<RoomMessage> = emptyList(),
-        val canLoadOldMessages: Boolean = false,
-        val canLoadNewMessages: Boolean = false,
+        val name: String?,
+        val users: Map<UserId, RoomUser?>,
+        val messages: List<RoomMessage>,
+        val canLoadOldMessages: Boolean,
+        val canLoadNewMessages: Boolean,
     )
 
     /**
@@ -178,8 +176,10 @@ class Client private constructor(
         }
     }
 
-    suspend fun loadThumbnail(imageInfo: ImageInfo): Result<Flow<ByteArray>> =
-        matrixClient.media.getThumbnail(imageInfo.url, imageInfo.width.toLong(), imageInfo.height.toLong())
+    suspend fun loadThumbnail(imageInfo: ImageInfo): Result<Flow<ByteArray>> {
+        println("Loading image $imageInfo...")
+        return matrixClient.media.getThumbnail(imageInfo.url, 10 * imageInfo.width.toLong(), 10 * imageInfo.height.toLong())
+    }
 
     suspend fun send(message: OutgoingMessage) =
         matrixClient.room.sendMessage(message.roomId) {

@@ -13,11 +13,6 @@ import java.time.Instant
 class ChatViewModel(
     config: Config.() -> Unit = {},
 ) {
-    data class UiState(
-        val mainMessages: List<LogMessage> = emptyList(),
-        val activeRoomId: RoomId? = null,
-    )
-
     data class Config(
         val nMessageBatchSize: Long = 10,
     )
@@ -28,14 +23,17 @@ class ChatViewModel(
     private val _client = MutableStateFlow<Client?>(null)
     private val _activeRoomFlow = MutableStateFlow<Flow<Client.RoomState>?>(null)
 
-    private val _uiState = MutableStateFlow(UiState())
-    val uiState: StateFlow<UiState> = _uiState
+    private val _mainMessages = MutableStateFlow<List<LogMessage>>(emptyList())
+    val mainMessages:StateFlow<List<LogMessage>> = _mainMessages
 
     /**
      * Username of the logged-in user.
      */
     private val _username = MutableStateFlow<String?>(null)
     val username: StateFlow<String?> = _username
+
+    private val _activeRoomId = MutableStateFlow<RoomId?>(null)
+    val activeRoomId: StateFlow<RoomId?> = _activeRoomId
 
     private val _activeRoomState = MutableStateFlow<Client.RoomState?>(null)
     val activeRoomState: StateFlow<Client.RoomState?> = _activeRoomState
@@ -97,9 +95,8 @@ class ChatViewModel(
         pushMainMessages(LogMessage.InfoMessage("Logging out...", Instant.now()))
         _client.value?.close()
         _client.update { null }
-        _uiState.update { it.copy(activeRoomId = null) }
         _username.update { null }
-        _activeRoomState.update { null }
+        _activeRoomFlow.update { null }
         _roomsState.update { emptyList() }
         pushMainMessages(LogMessage.InfoMessage("Logged out", Instant.now()))
     }
@@ -109,11 +106,9 @@ class ChatViewModel(
      * Otherwise, the active room is set to the room with the given roomId.
      */
     fun setActiveRoom(roomId: RoomId?) {
-        val newRoomId = if (_uiState.value.activeRoomId == roomId) null else roomId
+        val newRoomId = if (_activeRoomId.value == roomId) null else roomId
 
-        _uiState.update { currentUiState ->
-            currentUiState.copy(activeRoomId = newRoomId)
-        }
+        _activeRoomId.update { newRoomId }
 
         _scope.launch {
             _activeRoomFlow.update {
@@ -146,7 +141,7 @@ class ChatViewModel(
             _client.value?.leaveRoom(roomId)
         }
 
-        if (_uiState.value.activeRoomId == roomId) {
+        if (_activeRoomId.value == roomId) {
             setActiveRoom(null)
         }
     }
@@ -162,7 +157,7 @@ class ChatViewModel(
 
     fun loadOldMessages() {
         _scope.launch {
-            _uiState.value.activeRoomId?.let { roomId ->
+            _activeRoomId.value?.let { roomId ->
                 _client.value?.loadOldMessages(roomId, _config.nMessageBatchSize)
             }
         }
@@ -170,7 +165,7 @@ class ChatViewModel(
 
     fun loadNewMessages() {
         _scope.launch {
-            _uiState.value.activeRoomId?.let { roomId ->
+            _activeRoomId.value?.let { roomId ->
                 _client.value?.loadNewMessages(roomId)
             }
         }
@@ -204,8 +199,6 @@ class ChatViewModel(
     }
 
     private fun pushMainMessages(message: LogMessage) {
-        _uiState.update { currentState ->
-            currentState.copy(mainMessages = currentState.mainMessages + message)
-        }
+        _mainMessages.update { it + message }
     }
 }

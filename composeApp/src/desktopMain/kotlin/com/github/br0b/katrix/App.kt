@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -23,11 +24,14 @@ import androidx.compose.ui.unit.dp
 import com.github.br0b.katrix.dialogs.AddRoomDialog
 import com.github.br0b.katrix.dialogs.ConfirmDialog
 import com.github.br0b.katrix.dialogs.LoginDialog
+import com.github.br0b.katrix.messages.LogMessage
+import com.github.br0b.katrix.messages.OutgoingMessage
 import io.ktor.client.engine.*
 import kotlinx.coroutines.flow.StateFlow
 import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.core.model.RoomId
 import net.folivo.trixnity.core.model.events.m.room.Membership
+import org.jetbrains.skia.Image
 
 @Composable
 fun App(
@@ -74,8 +78,9 @@ fun ChatScreen(
                     activeRoomState?.let { activeRoomData ->
                         RoomMessages(
                             roomState = activeRoomData,
-                            onLoadOldMessages = { viewModel.fetchOldMessages() },
-                            onLoadNewMessages = { viewModel.fetchNewMessages() },
+                            onLoadOldMessages = { viewModel.loadOldMessages() },
+                            onLoadNewMessages = { viewModel.loadNewMessages() },
+                            onLoadThumbnail = { viewModel.loadThumbnail(it) }
                         )
                     } ?: MainMessages(uiState.mainMessages)
                 }
@@ -157,6 +162,7 @@ fun RoomMessages(
     roomState: Client.RoomState,
     onLoadOldMessages: () -> Unit,
     onLoadNewMessages: () -> Unit,
+    onLoadThumbnail: (ImageInfo) -> StateFlow<Result<ByteArray>?>,
     modifier: Modifier = Modifier,
 ) {
     if (roomState.canLoadNewMessages) {
@@ -181,7 +187,20 @@ fun RoomMessages(
                 val senderId = message.senderId
                 val sender = roomState.users[senderId]?.name ?: senderId.toString()
 
-                MessageView(message.getFormatted(sender), message.getColor())
+                Column {
+                    Text("[${message.time}] $sender: ${message.body}", color = Color.Blue)
+                    message.thumbnailInfo?.let { imgInfo ->
+                        println("[App] Loading thumbnail for ${imgInfo.name}...")
+                        onLoadThumbnail(imgInfo).collectAsState().value?.fold(
+                            onSuccess = { byteArray ->
+                                println("Byte array size: ${byteArray.size}")
+                                val bitmap = Image.makeFromEncoded(byteArray).toComposeImageBitmap()
+                                Image(bitmap, imgInfo.name)
+                            },
+                            onFailure = { Text("Couldn't load ${imgInfo.name}") }
+                        ) ?: Text(imgInfo.name)
+                    } ?: println("No thumbnail info")
+                }
             }
         }
     }
@@ -199,8 +218,15 @@ fun MainMessages(
         header = { Text("Main", textDecoration = TextDecoration.Underline) },
         modifier,
     ) {
-        ScrollableList(messages) {
-            MessageView(it.getFormatted(), it.getColor())
+        ScrollableList(messages) { msg ->
+            when(msg) {
+                is LogMessage.InfoMessage -> {
+                    Text("[${msg.timestamp}]: ${msg.body}", color = Color.Blue)
+                }
+                is LogMessage.ErrorMessage -> {
+                    Text("[${msg.timestamp}]: ${msg.body}", color = Color.Red)
+                }
+            }
         }
     }
 }
@@ -279,7 +305,7 @@ fun MessageInput(
         activeRoomId?.let {
             Button(
                 onClick = {
-                    onSend(OutgoingMessage(messageInput, activeRoomId))
+                    onSend(OutgoingMessage(activeRoomId, messageInput))
                     messageInput = ""
                 },
                 enabled = messageInput.isNotEmpty(),
@@ -293,17 +319,6 @@ fun MessageInput(
             Text("Send")
         }
     }
-}
-
-@Composable
-fun MessageView(
-    body: String,
-    color: Color,
-) {
-    Text(
-        text = body,
-        color = color,
-    )
 }
 
 @Composable

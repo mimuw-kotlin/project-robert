@@ -1,5 +1,7 @@
 package com.github.br0b.katrix
 
+import com.github.br0b.katrix.messages.OutgoingMessage
+import com.github.br0b.katrix.messages.RoomMessage
 import io.ktor.client.engine.*
 import io.ktor.http.*
 import kotlinx.coroutines.flow.*
@@ -23,6 +25,71 @@ import java.time.Instant
 class Client private constructor(
     private val matrixClient: MatrixClient,
 ) : AutoCloseable {
+    companion object {
+        suspend fun login(
+            loginData: LoginData,
+            httpClientEngine: HttpClientEngine,
+        ): Result<Client> {
+            val cache = Cache.create()
+
+            return MatrixClient.login(
+                baseUrl = loginData.baseUrl,
+                identifier = loginData.identifier,
+                password = loginData.password,
+                repositoriesModule = cache.getRepositoryModule(),
+                mediaStore = cache.getMediaStore(),
+                configuration = {
+                    this.httpClientEngine = httpClientEngine
+                },
+            ).fold(onSuccess = { matrixClient ->
+                matrixClient.startSync()
+                Result.success(Client(matrixClient))
+            }, onFailure = {
+                Result.failure(it)
+            })
+        }
+
+        /**
+         * An event transformer for creating a Timeline of RoomMessages.
+         */
+        private fun eventTransformer(eventFlow: Flow<TimelineEvent>): Flow<RoomMessage?> {
+            return eventFlow.map { event ->
+                event.content?.getOrNull()?.let { content ->
+                    when (content) {
+                        is RoomMessageEventContent.TextBased -> RoomMessage(
+                            body = content.body,
+                            time = Instant.ofEpochMilli(event.originTimestamp),
+                            senderId = event.sender,
+                            thumbnailInfo = null,
+                        )
+                        is RoomMessageEventContent.FileBased.Image ->RoomMessage(
+                            body = content.fileName?.let { fileName -> if (content.body != fileName) content.body else null} ?: content.body,
+                            time = Instant.ofEpochMilli(event.originTimestamp),
+                            senderId = event.sender,
+                            thumbnailInfo = content.info?.let { info ->
+                                info.thumbnailInfo?.let { thumbnailInfo ->
+                                    info.thumbnailUrl?.let {thumbnailUrl ->
+                                        thumbnailInfo.width?.let { width ->
+                                            thumbnailInfo.height?.let { height ->
+                                                ImageInfo(
+                                                    name = content.fileName ?: content.body,
+                                                    url = thumbnailUrl,
+                                                    width = width,
+                                                    height = height
+                                                )
+                                            } ?: run { println("No height"); null }
+                                        } ?: run { println("No width"); null }
+                                    } ?: run { println("No thumbnail url"); null }
+                                } ?: run { println("No thumbnail info"); null }
+                            } ?: run { println("No info"); null }
+                        )
+                        else -> null
+                    }
+                }
+            }
+        }
+    }
+
     data class LoginData(
         val baseUrl: Url,
         val identifier: IdentifierType.User,
@@ -111,12 +178,19 @@ class Client private constructor(
         }
     }
 
+    suspend fun loadThumbnail(imageInfo: ImageInfo): Result<Flow<ByteArray>> =
+        matrixClient.media.getThumbnail(imageInfo.url, imageInfo.width.toLong(), imageInfo.height.toLong())
+
     suspend fun send(message: OutgoingMessage) =
         matrixClient.room.sendMessage(message.roomId) {
             text(message.body)
         }
 
     fun getUserId() = matrixClient.userId
+
+    override fun close() {
+        matrixClient.close()
+    }
 
     private suspend fun getRoomUsers(roomId: RoomId): Flow<Map<UserId, Flow<RoomUser?>>> {
         matrixClient.user.loadMembers(roomId)
@@ -126,54 +200,5 @@ class Client private constructor(
     private suspend fun getLatestEventId(roomId: RoomId): EventId {
         return matrixClient.room.getLastTimelineEvent(roomId).filterNotNull().first().first().eventId
     }
-
     private fun getTimeline(roomId: RoomId): Timeline<Flow<RoomMessage?>> = matrixClient.room.getTimeline(roomId, ::eventTransformer)
-
-    override fun close() {
-        matrixClient.close()
-    }
-
-    companion object {
-        suspend fun login(
-            loginData: LoginData,
-            httpClientEngine: HttpClientEngine,
-        ): Result<Client> {
-            val cache = Cache.create()
-
-            return MatrixClient.login(
-                baseUrl = loginData.baseUrl,
-                identifier = loginData.identifier,
-                password = loginData.password,
-                repositoriesModule = cache.getRepositoryModule(),
-                mediaStore = cache.getMediaStore(),
-                configuration = {
-                    this.httpClientEngine = httpClientEngine
-                },
-            ).fold(onSuccess = { matrixClient ->
-                matrixClient.startSync()
-                Result.success(Client(matrixClient))
-            }, onFailure = {
-                Result.failure(it)
-            })
-        }
-
-        /**
-         * An event transformer for creating a Timeline of RoomMessages.
-         */
-        private fun eventTransformer(eventFlow: Flow<TimelineEvent>): Flow<RoomMessage?> {
-            return eventFlow.map { event ->
-                event.content?.getOrNull()?.let { content ->
-                    if (content is RoomMessageEventContent) {
-                        RoomMessage(
-                            body = content.body,
-                            time = Instant.ofEpochMilli(event.originTimestamp),
-                            senderId = event.sender,
-                        )
-                    } else {
-                        null
-                    }
-                }
-            }
-        }
-    }
 }

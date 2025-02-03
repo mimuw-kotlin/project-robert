@@ -1,5 +1,7 @@
 package com.github.br0b.katrix
 
+import com.github.br0b.katrix.messages.LogMessage
+import com.github.br0b.katrix.messages.OutgoingMessage
 import io.ktor.client.engine.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -11,6 +13,15 @@ import java.time.Instant
 class ChatViewModel(
     config: Config.() -> Unit = {},
 ) {
+    data class UiState(
+        val mainMessages: List<LogMessage> = emptyList(),
+        val activeRoomId: RoomId? = null,
+    )
+
+    data class Config(
+        val nMessageBatchSize: Long = 10,
+    )
+
     private val _scope = CoroutineScope(Dispatchers.IO)
     private val _config = Config().apply(config)
 
@@ -149,7 +160,7 @@ class ChatViewModel(
         }
     }
 
-    fun fetchOldMessages() {
+    fun loadOldMessages() {
         _scope.launch {
             _uiState.value.activeRoomId?.let { roomId ->
                 _client.value?.loadOldMessages(roomId, _config.nMessageBatchSize)
@@ -157,12 +168,34 @@ class ChatViewModel(
         }
     }
 
-    fun fetchNewMessages() {
+    fun loadNewMessages() {
         _scope.launch {
             _uiState.value.activeRoomId?.let { roomId ->
                 _client.value?.loadNewMessages(roomId)
             }
         }
+    }
+
+    fun loadThumbnail(info: ImageInfo): StateFlow<Result<ByteArray>?> {
+        val image = MutableStateFlow<Result<ByteArray>?>(null)
+
+        _scope.launch {
+            println("Loading flow for thumbnail ${info.name}...")
+            _client.value?.loadThumbnail(info)?.fold(
+                onSuccess = { byteArrayFlow ->
+                    println("Received flow for thumbnail ${info.name}")
+                    byteArrayFlow.collect { byteArray ->
+                        image.update { Result.success(byteArray) }
+                    }
+                },
+                onFailure = { throwable ->
+                println("Failed to load flor for thumbnail ${info.name}: $throwable")
+                    image.update { Result.failure(throwable) }
+                }
+            )
+        }
+
+        return image
     }
 
     private fun onLoginSuccess(client: Client) {
@@ -175,13 +208,4 @@ class ChatViewModel(
             currentState.copy(mainMessages = currentState.mainMessages + message)
         }
     }
-
-    data class UiState(
-        val mainMessages: List<LogMessage> = emptyList(),
-        val activeRoomId: RoomId? = null,
-    )
-
-    data class Config(
-        val nMessageBatchSize: Long = 10,
-    )
 }

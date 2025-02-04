@@ -4,8 +4,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.MenuBar
 import com.github.br0b.katrix.dialogs.LoginDialog
-import io.ktor.client.engine.*
-import io.ktor.http.*
 
 @Composable
 fun FrameWindowScope.KatrixMenuBar(

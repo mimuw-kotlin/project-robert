@@ -9,7 +9,7 @@ https://drive.google.com/file/d/1UJ1ghRxLLHHnHO2t90zLPoDBdAMNtIZG/view?usp=shari
 - Robert Grigoryan (@goborori on GitHub)
 
 ## Description
-A [Matrix](https://matrix.org/) client written using Compose Multiplatform and Trixnity Messenger.
+A [Matrix](https://matrix.org/) client written using Compose Multiplatform and Trixnity.
 
 ## Features
 - user authentication

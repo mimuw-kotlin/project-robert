@@ -1,0 +1,31 @@
+[versions]
+androidx-lifecycle = "2.8.4"
+compose-multiplatform = "1.7.0"
+kotlin = "2.1.0"
+kotlinx-collections-immutable = "0.3.8"
+kotlinx-coroutines = "1.10.1"
+trixnity = "4.11.0"
+slf4j = "2.0.9"
+ktor = "3.0.2"
+ktlint-gradle = "12.1.1"
+ktlint-compose-rules = "0.0.26"
+
+[libraries]
+androidx-lifecycle-viewmodel = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
+androidx-lifecycle-runtime-compose = { group = "org.jetbrains.androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
+kotlinx-collections-immutable = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version.ref = "kotlinx-collections-immutable" }
+kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
+trixnity-client = { group = "net.folivo", name = "trixnity-client", version.ref = "trixnity" }
+trixnity-client-repository-realm = { group = "net.folivo", name = "trixnity-client-repository-realm", version.ref = "trixnity" }
+trixnity-client-media-okio = { group = "net.folivo", name = "trixnity-client-media-okio", version.ref = "trixnity" }
+slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
+ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
+ktlint-compose-rules = { group = "com.twitter.compose.rules", name = "ktlint", version.ref = "ktlint-compose-rules" }
+
+[plugins]
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-gradle" }

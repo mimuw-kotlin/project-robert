@@ -12,7 +12,7 @@ import org.koin.core.module.Module
  */
 class Cache private constructor(
     private val repositoryModule: Module,
-    private val mediaStore: MediaStore,
+    private val mediaStore: MediaStore
 ) {
     companion object {
         fun create(path: Path? = null): Cache {
@@ -24,7 +24,7 @@ class Cache private constructor(
             val mediaStore = OkioMediaStore(nonNullPath.resolve("media"))
             return Cache(
                 repositoryModule = repositoryModule,
-                mediaStore = mediaStore,
+                mediaStore = mediaStore
             )
         }
     }

@@ -2,19 +2,27 @@ package com.github.br0b.katrix
 
 import com.github.br0b.katrix.messages.LogMessage
 import com.github.br0b.katrix.messages.OutgoingMessage
-import io.ktor.client.engine.*
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import io.ktor.client.engine.HttpClientEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import net.folivo.trixnity.client.store.Room
 import net.folivo.trixnity.core.model.RoomId
 import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModel(
-    config: Config.() -> Unit = {},
+    config: Config.() -> Unit = {}
 ) {
     data class Config(
-        val nMessageBatchSize: Long = 10,
+        val nMessageBatchSize: Long = 10
     )
 
     private val _scope = CoroutineScope(Dispatchers.IO)
@@ -24,7 +32,7 @@ class ChatViewModel(
     private val _activeRoomFlow = MutableStateFlow<Flow<Client.RoomState>?>(null)
 
     private val _mainMessages = MutableStateFlow<List<LogMessage>>(emptyList())
-    val mainMessages:StateFlow<List<LogMessage>> = _mainMessages
+    val mainMessages: StateFlow<List<LogMessage>> = _mainMessages
 
     /**
      * Username of the logged-in user.
@@ -61,7 +69,7 @@ class ChatViewModel(
 
     fun login(
         loginData: Client.LoginData,
-        httpClientEngine: HttpClientEngine,
+        httpClientEngine: HttpClientEngine
     ) {
         _scope.launch {
             if (_client.value != null) {
@@ -73,8 +81,8 @@ class ChatViewModel(
                         pushMainMessages(
                             LogMessage.InfoMessage(
                                 "Logged in",
-                                Instant.now(),
-                            ),
+                                Instant.now()
+                            )
                         )
                         onLoginSuccess(it)
                     },
@@ -82,10 +90,10 @@ class ChatViewModel(
                         pushMainMessages(
                             LogMessage.ErrorMessage(
                                 it.message ?: "Unknown error",
-                                Instant.now(),
-                            ),
+                                Instant.now()
+                            )
                         )
-                    },
+                    }
                 )
             }
         }
@@ -127,8 +135,8 @@ class ChatViewModel(
             _client.value?.createRoom(name) ?: pushMainMessages(
                 LogMessage.ErrorMessage(
                     "Log in to add rooms!",
-                    Instant.now(),
-                ),
+                    Instant.now()
+                )
             )
         }
     }
@@ -171,27 +179,7 @@ class ChatViewModel(
         }
     }
 
-    fun loadThumbnail(info: ImageInfo): StateFlow<Result<ByteArray>?> {
-        val image = MutableStateFlow<Result<ByteArray>?>(null)
-
-        _scope.launch {
-            println("Loading flow for thumbnail ${info.name}...")
-            _client.value?.loadThumbnail(info)?.fold(
-                onSuccess = { byteArrayFlow ->
-                    println("Received flow for thumbnail ${info.name}")
-                    byteArrayFlow.collect { byteArray ->
-                        image.update { Result.success(byteArray) }
-                    }
-                },
-                onFailure = { throwable ->
-                println("Failed to load flor for thumbnail ${info.name}: $throwable")
-                    image.update { Result.failure(throwable) }
-                }
-            )
-        }
-
-        return image
-    }
+    suspend fun loadThumbnail(info: ImageInfo) = _client.value?.loadThumbnail(info)
 
     private fun onLoginSuccess(client: Client) {
         _client.update { client }

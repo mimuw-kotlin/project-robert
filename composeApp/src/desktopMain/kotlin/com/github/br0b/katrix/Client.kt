@@ -23,12 +23,12 @@ import java.time.Instant
  * A client that interacts with the Matrix server.
  */
 class Client private constructor(
-    private val matrixClient: MatrixClient,
+    private val matrixClient: MatrixClient
 ) : AutoCloseable {
     companion object {
         suspend fun login(
             loginData: LoginData,
-            httpClientEngine: HttpClientEngine,
+            httpClientEngine: HttpClientEngine
         ): Result<Client> {
             val cache = Cache.create()
 
@@ -40,13 +40,13 @@ class Client private constructor(
                 mediaStore = cache.getMediaStore(),
                 configuration = {
                     this.httpClientEngine = httpClientEngine
-                },
+                }
             ).fold(onSuccess = { matrixClient ->
                 matrixClient.startSync()
                 Result.success(Client(matrixClient))
             }, onFailure = {
-                Result.failure(it)
-            })
+                    Result.failure(it)
+                })
         }
 
         /**
@@ -56,31 +56,34 @@ class Client private constructor(
             return eventFlow.map { event ->
                 event.content?.getOrNull()?.let { content ->
                     when (content) {
-                        is RoomMessageEventContent.TextBased -> RoomMessage(
-                            body = content.body,
-                            time = Instant.ofEpochMilli(event.originTimestamp),
-                            senderId = event.sender,
-                            thumbnailInfo = null,
-                        )
-                        is RoomMessageEventContent.FileBased.Image ->RoomMessage(
-                            body = content.fileName?.let { fileName -> if (content.body != fileName) content.body else null} ?: content.body,
-                            time = Instant.ofEpochMilli(event.originTimestamp),
-                            senderId = event.sender,
-                            thumbnailInfo = content.info?.let { info ->
-                                content.url?.let { url ->
-                                    info.width?.let { width ->
-                                        info.height?.let { height ->
-                                            ImageInfo(
-                                                name = content.fileName ?: content.body,
-                                                url = url,
-                                                width = width,
-                                                height = height
-                                            )
+                        is RoomMessageEventContent.TextBased ->
+                            RoomMessage(
+                                body = content.body,
+                                time = Instant.ofEpochMilli(event.originTimestamp),
+                                senderId = event.sender,
+                                imageInfo = null
+                            )
+                        is RoomMessageEventContent.FileBased.Image ->
+                            RoomMessage(
+                                body = content.fileName?.let { fileName -> if (content.body != fileName) content.body else "" } ?: "",
+                                time = Instant.ofEpochMilli(event.originTimestamp),
+                                senderId = event.sender,
+                                imageInfo =
+                                content.info?.let { info ->
+                                    content.url?.let { url ->
+                                        info.width?.let { width ->
+                                            info.height?.let { height ->
+                                                ImageInfo(
+                                                    name = content.fileName ?: content.body,
+                                                    url = url,
+                                                    width = width,
+                                                    height = height
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        )
+                            )
                         else -> null
                     }
                 }
@@ -91,7 +94,7 @@ class Client private constructor(
     data class LoginData(
         val baseUrl: Url,
         val identifier: IdentifierType.User,
-        val password: String,
+        val password: String
     )
 
     data class RoomState(
@@ -100,7 +103,7 @@ class Client private constructor(
         val users: Map<UserId, RoomUser?>,
         val messages: List<RoomMessage>,
         val canLoadOldMessages: Boolean,
-        val canLoadNewMessages: Boolean,
+        val canLoadNewMessages: Boolean
     )
 
     /**
@@ -114,7 +117,7 @@ class Client private constructor(
     suspend fun createRoom(name: String) =
         matrixClient.api.room.createRoom(
             name = name,
-            visibility = DirectoryVisibility.PUBLIC,
+            visibility = DirectoryVisibility.PUBLIC
         )
 
     suspend fun leaveRoom(roomId: RoomId) = matrixClient.api.room.leaveRoom(roomId)
@@ -126,7 +129,7 @@ class Client private constructor(
      */
     suspend fun getRoomFlow(
         roomId: RoomId,
-        nInitEvents: Long,
+        nInitEvents: Long
     ): Flow<RoomState> {
         timelineMutex.withLock {
             val timeline =
@@ -136,7 +139,7 @@ class Client private constructor(
 
                         init(
                             startFrom = startFrom,
-                            configBefore = { this.maxSize = nInitEvents },
+                            configBefore = { this.maxSize = nInitEvents }
                         )
                     }
                 }
@@ -146,7 +149,7 @@ class Client private constructor(
                 getRoomUsers(roomId).flatten(),
                 timeline.state.map { it.elements }.flatten(),
                 timeline.state.map { it.canLoadBefore },
-                timeline.state.map { it.canLoadAfter },
+                timeline.state.map { it.canLoadAfter }
             ) { name, users, messages, canLoadOldMessages, canLoadNewMessages ->
                 RoomState(
                     roomId,
@@ -154,7 +157,7 @@ class Client private constructor(
                     users,
                     messages,
                     canLoadOldMessages,
-                    canLoadNewMessages,
+                    canLoadNewMessages
                 )
             }
         }
@@ -162,7 +165,7 @@ class Client private constructor(
 
     suspend fun loadOldMessages(
         roomId: RoomId,
-        maxNMessages: Long,
+        maxNMessages: Long
     ) {
         timelineMutex.withLock {
             val change = timelineMap[roomId]?.loadBefore { this.maxSize = maxNMessages }
@@ -178,7 +181,7 @@ class Client private constructor(
 
     suspend fun loadThumbnail(imageInfo: ImageInfo): Result<Flow<ByteArray>> {
         println("Loading image $imageInfo...")
-        return matrixClient.media.getThumbnail(imageInfo.url, 10 * imageInfo.width.toLong(), 10 * imageInfo.height.toLong())
+        return matrixClient.media.getThumbnail(imageInfo.url, imageInfo.width.toLong(), imageInfo.height.toLong())
     }
 
     suspend fun send(message: OutgoingMessage) =
@@ -200,5 +203,6 @@ class Client private constructor(
     private suspend fun getLatestEventId(roomId: RoomId): EventId {
         return matrixClient.room.getLastTimelineEvent(roomId).filterNotNull().first().first().eventId
     }
+
     private fun getTimeline(roomId: RoomId): Timeline<Flow<RoomMessage?>> = matrixClient.room.getTimeline(roomId, ::eventTransformer)
 }

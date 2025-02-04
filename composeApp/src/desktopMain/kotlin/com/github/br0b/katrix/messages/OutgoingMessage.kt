@@ -4,5 +4,5 @@ import net.folivo.trixnity.core.model.RoomId
 
 data class OutgoingMessage(
     val roomId: RoomId,
-    val body: String,
+    val body: String
 )

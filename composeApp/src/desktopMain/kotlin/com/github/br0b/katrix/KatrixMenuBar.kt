@@ -12,7 +12,7 @@ fun FrameWindowScope.KatrixMenuBar(
     onLogin: (Client.LoginData) -> Unit,
     onLogout: () -> Unit,
     onDebug: () -> Unit,
-    onQuit: () -> Unit,
+    onQuit: () -> Unit
 ) {
     var openLoginDialog by remember { mutableStateOf(false) }
 
@@ -31,7 +31,7 @@ fun FrameWindowScope.KatrixMenuBar(
                 onLogin(it)
                 openLoginDialog = false
             },
-            onDismissRequest = { openLoginDialog = false },
+            onDismissRequest = { openLoginDialog = false }
         )
     }
 }

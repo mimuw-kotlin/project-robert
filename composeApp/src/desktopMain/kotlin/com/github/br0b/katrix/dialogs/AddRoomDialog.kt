@@ -9,7 +9,7 @@ import com.github.br0b.katrix.FormField
 @Composable
 fun AddRoomDialog(
     onAddRoom: (String) -> Unit,
-    onDismissRequest: () -> Unit,
+    onDismissRequest: () -> Unit
 ) {
     var roomName by remember { mutableStateOf("") }
 
@@ -28,6 +28,6 @@ fun AddRoomDialog(
             Button(onClick = onDismissRequest) {
                 Text("Cancel")
             }
-        },
+        }
     )
 }

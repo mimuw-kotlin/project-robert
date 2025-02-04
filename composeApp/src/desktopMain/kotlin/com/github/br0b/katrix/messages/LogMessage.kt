@@ -5,11 +5,11 @@ import java.time.Instant
 sealed class LogMessage {
     data class InfoMessage(
         val body: String,
-        val timestamp: Instant,
+        val timestamp: Instant
     ) : LogMessage()
 
     data class ErrorMessage(
         val body: String,
-        val timestamp: Instant,
+        val timestamp: Instant
     ) : LogMessage()
 }

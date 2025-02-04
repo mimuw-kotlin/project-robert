@@ -30,6 +30,7 @@ kotlin {
             implementation(libs.slf4j.simple)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.kotlinx.collections.immutable)
         }
 
         commonTest.dependencies {
@@ -51,6 +52,12 @@ kotlin {
 }
 
 ktlint {
+    version = "0.47.1"
+
+    dependencies {
+        ktlintRuleset(libs.ktlint.compose.rules)
+    }
+
     filter {
         exclude { element ->
             val path = element.file.path

@@ -17,7 +17,7 @@ import net.folivo.trixnity.clientserverapi.model.authentication.IdentifierType
 @Composable
 fun LoginDialog(
     onLogin: (Client.LoginData) -> Unit,
-    onDismissRequest: () -> Unit,
+    onDismissRequest: () -> Unit
 ) {
     var baseUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
@@ -39,7 +39,7 @@ fun LoginDialog(
                     onLogin(Client.LoginData(Url(baseUrl), IdentifierType.User(username), password))
                 },
                 enabled = baseUrl.isNotEmpty() && username.isNotEmpty() && password.isNotEmpty(),
-                modifier = Modifier.testTag("LOGIN_DIALOG_BUTTON"),
+                modifier = Modifier.testTag("LOGIN_DIALOG_BUTTON")
             ) {
                 Text("Login")
             }
@@ -48,6 +48,6 @@ fun LoginDialog(
             Button(onClick = onDismissRequest) {
                 Text("Cancel")
             }
-        },
+        }
     )
 }

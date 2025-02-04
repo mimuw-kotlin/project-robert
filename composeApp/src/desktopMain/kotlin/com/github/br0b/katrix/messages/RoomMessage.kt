@@ -5,8 +5,8 @@ import net.folivo.trixnity.core.model.UserId
 import java.time.Instant
 
 data class RoomMessage(
-    val body: String?,
+    val body: String,
     val time: Instant,
     val senderId: UserId,
-    val thumbnailInfo: ImageInfo?,
+    val imageInfo: ImageInfo?
 )
